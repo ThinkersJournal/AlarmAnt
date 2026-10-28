@@ -1,0 +1,35 @@
+# A2 design: sender and acknowledge endpoint
+
+Status: DESIGN ONLY. No sender code until the PM answers (ant-first notice, 2026-10-28).
+Constraints: PATENT-SWEEP.md design constraints apply (one alert priority, per-app override, flat escalation).
+
+## Flow
+1. A caller raises an alert (A9 API, later). 2. The sender builds one high-priority FCM data message and posts it. 3. The phone alarms until Acknowledge (A3). 4. The app calls the acknowledge endpoint; state moves `sent` to `acked` (A4). 5. No ack by the timeout: A5 escalates (blocked on A1).
+
+## Shared Ants needed (each a stub, to be confirmed against the Ant's real API)
+| Need | Ant | Stub in AlarmAnt |
+|---|---|---|
+| Settings (FCM project, timeouts) | ConfigurAnt | `AlarmConfig` struct, loaded by the Ant |
+| FCM service-account key | SecretAnt | `SecretRef("fcm-service-account")`, never in repo |
+| Outbound FCM HTTP v1 call, retry | HTTPAnt | `PushTransport` trait |
+| Alert delivery | NotificAnt/CommunicAnt | `AlertChannel` trait, FCM channel implemented by the Ant if it can |
+| Ack endpoint | APIAnt (+ WebHostAnt) | `POST /ack/{alert_id}` handler spec only |
+| Alert state | PersistAnt | `AlertStore` trait: id, status, sent_at, acked_at |
+| Ack trail | AuditAnt | event `alert.sent`, `alert.acked` |
+| Log hygiene | RedactAnt | alert text redacted in logs |
+| Ack timeout | SchedulAnt | one-shot job per alert |
+| Daemon supervision (VPS only) | SupervisorAnt | none |
+
+AlarmAnt's own code is only the alert model, the FCM payload shape, and the state machine.
+
+## Ant availability (PM, 2026-10-28)
+Real releases on crates.io: configurant 0.5.4, persistant 0.11.7, capant 0.0.7. Every other Ant named above is a 0.0.0 placeholder. So only ConfigurAnt and PersistAnt can be used now; the rest stay stubs until released.
+
+## Requirement on NotificAnt
+NotificAnt is not designed yet. AlarmAnt requires of it: send a high-priority FCM HTTP v1 data message (priority HIGH, no notification payload), report the send result, retry on transient failure. Stubbed as `AlertChannel`.
+
+## Host: recommendation to CireSnave (not a decision)
+Rust service on the VPS rather than a Cloudflare Worker, because a Worker cannot use the Rust Ants. No code.
+
+## Resolved / open questions
+- Ack auth: per-device token issued at registration; needs SecretAnt/APIAnt guidance.
