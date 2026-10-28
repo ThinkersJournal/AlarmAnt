@@ -22,7 +22,14 @@ Constraints: PATENT-SWEEP.md design constraints apply (one alert priority, per-a
 
 AlarmAnt's own code is only the alert model, the FCM payload shape, and the state machine.
 
-## Open questions for the PM
-- Which Ants exist on crates.io today, and does NotificAnt cover FCM high-priority data messages?
-- Host: Cloudflare Worker is TypeScript, so it cannot use the Rust Ants. A Rust service on the VPS (WebHostAnt) can. Recommend the VPS route.
+## Ant availability (PM, 2026-10-28)
+Real releases on crates.io: configurant 0.5.4, persistant 0.11.7, capant 0.0.7. Every other Ant named above is a 0.0.0 placeholder. So only ConfigurAnt and PersistAnt can be used now; the rest stay stubs until released.
+
+## Requirement on NotificAnt
+NotificAnt is not designed yet. AlarmAnt requires of it: send a high-priority FCM HTTP v1 data message (priority HIGH, no notification payload), report the send result, retry on transient failure. Stubbed as `AlertChannel`.
+
+## Host: recommendation to CireSnave (not a decision)
+Rust service on the VPS rather than a Cloudflare Worker, because a Worker cannot use the Rust Ants. No code.
+
+## Resolved / open questions
 - Ack auth: per-device token issued at registration; needs SecretAnt/APIAnt guidance.
