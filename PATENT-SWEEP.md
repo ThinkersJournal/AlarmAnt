@@ -56,6 +56,19 @@ Claims read: every independent claim, in full, from Google Patents text (machine
 | 21 | US9398619B1 | Emergency alert notification and verification | AT&T Mobility | Expired (fee) | 1, 10, 19 | emergency alerts | claims decide whether the device is outside an alert area by counting received alert signals | clear |
 | 22 | US9407756B2 | Notification acknowledgement in electronic devices | Intel | Active; est. 2033-11-20 | 1, 5, 9, 13 | acknowledging a notification | acknowledgement by matching an accelerometer/gyrometer motion recorded beforehand | clear (do not add motion-gesture acknowledgement) |
 
+## Official-record reads (USPTO PPUBS downloadPdf, page images, 2026-10-27)
+Method: `https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/<grant no>` saved with curl, last pages rendered to PNG with pymupdf, read by eye. These five are the hits whose verdict is a design-around or that are the broadest active claim; the Google Patents text matched the USPTO page for every claim viewed.
+
+| patent | USPTO claim text viewed | matches Google Patents text? |
+|---|---|---|
+| US9479387B2 | claims 1 to 19 (all three independents 1, 7, 14, in full) | yes |
+| US9467970B1 | claims 22 to 28 (independent 22 in full; independents 1, 8, 15 on the preceding page NOT viewed) | yes for claim 22 |
+| US8576828B1 | claims 1 to 7 (independent 1 in full; independents 11 and 21 on the next page NOT viewed) | yes for claim 1 |
+| US9886840B2 | claims 1 to 8 (the only independent, in full) | yes |
+| US7982598B2 | claims 1 to 12 (independents 1 and 8, in full) | yes |
+
+Still to read from the USPTO record (granted hits relied on only through Google Patents text): US9686398B2, US9350851B1, US7606561B2, US8478242B2, US8713118B2, US8825014B2, US9549393B2, US9137291B2, US12005234B2, US11768720B2, US10937000B2, US8634877B2, US11855943B2, US11362974B2, US9398619B1, US9407756B2; plus the missing independents above (US9467970B1 claims 1, 8, 15; US8576828B1 claims 11, 21).
+
 ## Needs review (to the PM)
 None yet at `needs-review`. Open items that stop a "complete" mark:
 - Not read: US8768737 (PagerDuty schedule management) and US8532627 (dynamic treatment of callers) returned HTTP 404 from the claims tool; CA 2838076 (alert and acknowledgment processing, delay timer), US9798596B2 (Commvault, automatic alert escalation), US8494481B1 (Amazon, mobile alarm device) and application US2024/0277934 (Medtronic, backup notifications) were seen but not read.
