@@ -1,6 +1,6 @@
 [package]
 name = "alarmant"
-version = "0.0.0"
+version = "0.0.1"
 edition = "2024"
 description = "Reserved name: an emergency alert that cannot be ignored (Android app plus sender). Placeholder, no functionality yet."
 license = "MIT OR Apache-2.0"
