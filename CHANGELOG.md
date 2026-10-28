@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.2
+- A2 design (docs only): names the shared Ants and a stub for each; no sender code.
+
 ## 0.0.1
 - Patent sweep, two passes (ROADMAP A1): 22 hits, independent claims read; INCOMPLETE, so A5 stays blocked. Docs only.
 
