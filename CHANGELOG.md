@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.4
+- Patent sweep: USPTO reads of every remaining granted hit (14 patents); verdicts hold; three new design constraints. Docs only.
+
 ## 0.0.3
 - Patent sweep: USPTO official-record reads for 11 more granted hits (second batch); 5 hits and 5 independents still unread, sweep stays INCOMPLETE. Docs only.
 
