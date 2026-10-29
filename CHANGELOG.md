@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.7
+- A3 design (docs only): Android alarm app flow, setup walkthrough, emulator tests and the real-phone list; no code.
+
 ## 0.0.6
 - A5: escalation state machine (sent, escalated, acked, unresolved) with an AlertChannel trait and fake-channel tests. No timers, HTTP, retries or provider code. Breaking (pre-1.0): first public API.
 
