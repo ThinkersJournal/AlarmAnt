@@ -67,7 +67,23 @@ Method: `https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/<grant
 | US9886840B2 | claims 1 to 8 (the only independent, in full) | yes |
 | US7982598B2 | claims 1 to 12 (independents 1 and 8, in full) | yes |
 
-Still to read from the USPTO record (granted hits relied on only through Google Patents text): US9686398B2, US9350851B1, US7606561B2, US8478242B2, US8713118B2, US8825014B2, US9549393B2, US9137291B2, US12005234B2, US11768720B2, US10937000B2, US8634877B2, US11855943B2, US11362974B2, US9398619B1, US9407756B2; plus the missing independents above (US9467970B1 claims 1, 8, 15; US8576828B1 claims 11, 21).
+Second batch (2026-10-29, same method; each page image viewed, claims read against my verdict):
+
+| patent | USPTO claim text viewed | verdict holds? |
+|---|---|---|
+| US9137291B2 | claims 1 to 13 (independents 1, 5, 9, 13) in full | yes: every independent needs a stored primary-device indicator and an ack sent to another device; claim 13 also a lower-latency second connection |
+| US12005234B2 | claims 1 to 19 (independents 1, 10, 16) in full | yes: medical application on a non-medical device, plus second notification at a body-attached medical device |
+| US10937000B2 | claims 1 to 20 (independents 1, 8, 15) in full | yes: real-time schedule UI with epochs and restrictions |
+| US8634877B2 | claims 1 to 25 (independents 1, 10, 19) in full | yes: counts repeated communications from a sender and analyses an accept/reject history |
+| US11855943B2 | claims 1 to 20 (independents 1, 11) in full | yes: DND override only on a count of communications from a particular group within a time threshold |
+| US11362974B2 | claims 1 to 20 (independents 1, 11) in full | yes: DND override only when an event trends in a social group |
+| US9398619B1 | claims 1 to 27 (independents 1, 10, 19) in full | yes: location decided by counting received emergency alert signals |
+| US9407756B2 | claims 1 to 16 (independents 1, 5, 9, 13) in full | yes: ack by matching a recorded accelerometer/gyrometer motion |
+| US11768720B2 | claims 1 to 10 (independents 1, 5, 10 start; claim 10 continues on a page not viewed) | yes so far: rolling table of recently resolved alerts |
+| US8713118B2 | claims 1 to 10 (independents 1 and 7) | yes so far: email-system test; claims after 10 not viewed |
+| US9549393B2 | claims 1 to 8 (independent 1) | yes so far: vibration alert accessory; independents 10 and 13 on a page not viewed |
+
+Page images that I requested but could not view (the image reader was rate-limited), so they count as NOT read: US9467970B1 independents 1, 8, 15; US8576828B1 independents 11, 21; US9686398B2, US9350851B1, US7606561B2, US8478242B2, US8825014B2 (all pages); the unviewed tails of US11768720B2, US8713118B2 and US9549393B2 named in the table. The PDFs are downloaded; the next step is to render and view those pages.
 
 ## Needs review (to the PM)
 None yet at `needs-review`. Open items that stop a "complete" mark:
