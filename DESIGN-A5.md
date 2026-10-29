@@ -34,3 +34,15 @@ Status: DESIGN ONLY (ant-first, PM 2026-10-28). No escalation code. Unblocked by
 ## Open questions
 - SMS and voice provider (cost per message is a few cents): needs CireSnave's choice, via the PM. Recommend a provider with a plain REST API.
 - Person 2's phone number is personal data: where it may be stored (SecretAnt vs ConfigurAnt).
+
+## Channel decision (PM 2026-10-29)
+A5 defines its own thin `AlertChannel` trait (send SMS, place call, report outcome); the state machine and its tests use a fake channel. No provider code in A5. SMSKit (ciresnave/smskit 0.3.0) or a direct provider becomes one adapter behind the trait later; the provider pick is parked until CireSnave decides SMSKit's future.
+
+## Requirements for an SMS/voice adapter
+Found by reading smskit@b69e34e (2026-03-30); an adapter, SMSKit or other, must supply:
+- **Voice:** place a call to a number (smskit has no voice path: 0 hits for voice/call/twiml in code).
+- **Retryable errors:** an error type that says whether a retry can help (smskit's `SmsError` has no such flag and its `FallbackClient` stringifies errors and moves on).
+- **Redacted credentials:** secrets held via SecretAnt, never printed by `Debug` (smskit clients hold plain `pub String` tokens under `#[derive(Debug)]`).
+- **Delivery receipts:** a delivered/failed outcome for a sent message (smskit handles inbound replies only).
+- **Phone numbers redacted** in errors and raw provider payloads (RedactAnt).
+- **HTTP via HTTPAnt**, not an adapter-private client; current dependency versions.
