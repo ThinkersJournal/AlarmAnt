@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.6
+- A5: escalation state machine (sent, escalated, acked, unresolved) with an AlertChannel trait and fake-channel tests. No timers, HTTP, retries or provider code. Breaking (pre-1.0): first public API.
+
 ## 0.0.5
 - A5 design (docs only): escalation to a second person, meets sweep constraints 1-8; no code.
 
