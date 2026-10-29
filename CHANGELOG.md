@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.3
+- Patent sweep: USPTO official-record reads for 11 more granted hits (second batch); 5 hits and 5 independents still unread, sweep stays INCOMPLETE. Docs only.
+
 ## 0.0.2
 - A2 design (docs only): names the shared Ants and a stub for each; no sender code.
 
