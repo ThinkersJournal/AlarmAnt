@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.8
+- A3: Android project skeleton under android/ (service, alarm playback, full-screen activity, ack worker, setup walkthrough) as UNBUILT files; excluded from the crate package. No Rust change.
+
 ## 0.0.7
 - A3 design (docs only): Android alarm app flow, setup walkthrough, emulator tests and the real-phone list; no code.
 

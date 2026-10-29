@@ -1,8 +1,9 @@
 [package]
 name = "alarmant"
-version = "0.0.7"
+version = "0.0.8"
 edition = "2024"
 description = "An emergency alert that cannot be ignored: escalation state machine (A5). Android app and senders not yet built."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ThinkersJournal/AlarmAnt"
 readme = "README.md"
+exclude = ["android/"]
