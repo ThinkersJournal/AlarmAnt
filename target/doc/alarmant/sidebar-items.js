@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AlertEvent","AlertState","AuditEvent"],"struct":["Alert","ChannelError","Contact","Outcome"],"trait":["AlertChannel"]};
