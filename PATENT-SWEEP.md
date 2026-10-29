@@ -2,7 +2,7 @@
 
 Date: 2026-10-26 (first pass), 2026-10-27 (second pass); Run by: AlarmAnt lane, Sonnet 5.5; Method: AI-assisted web search, then independent claims read in full with `tools/patent-claims.py` (Google Patents pages); NOT legal advice; NOT a freedom-to-operate opinion. There is no attorney.
 
-**Status: INCOMPLETE (second pass).** All four ideas were searched through a general web search (10 queries) plus one Google Patents query URL (Q11), after which that endpoint returned HTTP 503 and was abandoned. The USPTO full-text scan, Espacenet and WIPO were NOT run. The second pass added hits for ideas 2 (escalation) and 3 (self-test) and settled the one unresolved first-pass hit. **No escalation code (A5) may be written until this file is marked complete.** A2, A3, A4, A6 and A9 are not blocked by this sweep, but A3 must follow the design constraints below.
+**Status: USPTO reads of all granted hits complete (2026-10-29); the sweep as a whole stays INCOMPLETE until the PM accepts the routes not run (Espacenet, WIPO, assignee searches) as sufficient.** All four ideas were searched through a general web search (10 queries) plus one Google Patents query URL (Q11), after which that endpoint returned HTTP 503 and was abandoned. The USPTO full-text scan, Espacenet and WIPO were NOT run. The second pass added hits for ideas 2 (escalation) and 3 (self-test) and settled the one unresolved first-pass hit. **No escalation code (A5) may be written until this file is marked complete.** A2, A3, A4, A6 and A9 are not blocked by this sweep, but A3 must follow the design constraints below.
 
 ## Ideas swept
 1. A high-priority push that starts a foreground alarm on the alarm stream, repeating until the user acknowledges.
@@ -83,11 +83,34 @@ Second batch (2026-10-29, same method; each page image viewed, claims read again
 | US8713118B2 | claims 1 to 10 (independents 1 and 7) | yes so far: email-system test; claims after 10 not viewed |
 | US9549393B2 | claims 1 to 8 (independent 1) | yes so far: vibration alert accessory; independents 10 and 13 on a page not viewed |
 
-Page images that I requested but could not view (the image reader was rate-limited), so they count as NOT read: US9467970B1 independents 1, 8, 15; US8576828B1 independents 11, 21; US9686398B2, US9350851B1, US7606561B2, US8478242B2, US8825014B2 (all pages); the unviewed tails of US11768720B2, US8713118B2 and US9549393B2 named in the table. The PDFs are downloaded; the next step is to render and view those pages.
+Third batch (2026-10-29, same method; every claim page of each patent viewed unless noted):
+
+| patent | USPTO claim text viewed | verdict |
+|---|---|---|
+| US9467970B1 | independents 1, 8, 15, 22 in full | design-around holds: every independent needs provider profiles updated from stored performance metrics |
+| US8576828B1 | independents 1, 11, 21 in full | design-around holds: every independent needs (a) an override flag per message source, (b) a received-within-window test, (c) a current-alert-mode test, then override to a second mode |
+| US9686398B2 | claims 1 to 20 (independents 1, 7, 14) | clear: needs a first and a second text prompt detected inside message bodies, then alerts that override silent mode |
+| US9350851B1 | claims 1 to 17 (independents 1, 14, 16) | clear, but the closest silent-override hit: every independent needs a stored emergency code matched against the notification's code before the volume is raised; claims 1 and 14 add a matched remote map code and a location reply. Constraint 2 stays |
+| US7606561B2 | claims 1 to 15 (independents 1, 6) | clear: needs a voice call with no answer, then a phonebook override code requested from a server over a data network |
+| US8478242B2 | claims 1 to 18 (independents 1, 9) | clear: same override-code family as US7606561 |
+| US8825014B2 | claims 1 to 19 (independents 1, 15) | clear: repeat annunciation gated by a peak/non-peak schedule time period and a battery charge level setting |
+| US9549393B2 | claims 9 to 14 (independents 10, 13; claim 1 read in batch 1) | clear: every independent needs a vibration accessory |
+| US8713118B2 | claims 11 to 18 (independent 13; claims 1 to 10 read in batch 2) | clear: needs a test email forwarded to accounts in different domains, and checksum values in subject fields |
+| US11768720B2 | claims 10 to 16 (claims 1 to 10 read in batch 2) | clear: needs a pause period and a prediction model; dependents add normalised alert titles |
+| US9798596B2 | claims 1 to 15 (independents 1, 6, 11) | clear: needs a backup-system operation failure with a schedule window and throughput estimate, and a directory-services availability query |
+| US8494481B1 | claims 1 to 20 (independents 1, 18, 19, 20) | clear but near idea 2: needs an alarm triggered at a site, a responder's acceptance of the call message, then escalation if that responder has not cleared the alarm within a period. New constraint 6 |
+| US8768737B1 | claims 1 to 30 (independents 1, 9, 17, 24) | clear: schedule layers with precedence values and epochs (PagerDuty schedules) |
+| US8532627B1 | claims 1 to 18 (independents 1, 7, 13) | clear: needs a call to a silent phone, a caller-eligibility check and a caller entry marking the call important |
+
+Constraint 6 (from US8494481B1): the escalation chain stays a single step: no alert has an "accepted" state separate from "acknowledged", and no timer that escalates after acceptance but before clearance.
+Constraint 7 (from US8825014B2): a repeating alert must not be gated by a battery-level setting combined with schedule time periods.
+Constraint 8 (from US9686398B2): do not trigger an alert by detecting text in a message body; the alert is a data push.
+
+Result: the claims of every granted hit named in this file have now been read on the USPTO record, as the PM required on 2026-10-26. The Google Patents text matched the USPTO text for every claim viewed. Left undone: Espacenet, WIPO and assignee-specific searches were NOT run; the "Expired - Fee Related" entries are still unconfirmed on the USPTO record; the three published applications (CA 2838076, US2024/0277934, US20160086473) are unread.
 
 ## Needs review (to the PM)
 None yet at `needs-review`. Open items that stop a "complete" mark:
-- Not read: US8768737 (PagerDuty schedule management) and US8532627 (dynamic treatment of callers) returned HTTP 404 from the claims tool; CA 2838076 (alert and acknowledgment processing, delay timer), US9798596B2 (Commvault, automatic alert escalation), US8494481B1 (Amazon, mobile alarm device) and application US2024/0277934 (Medtronic, backup notifications) were seen but not read.
+- Not read: CA 2838076 (alert and acknowledgment processing, delay timer) and the applications US2024/0277934 and US20160086473; all granted hits are now read on the USPTO record.
 - #3, #4, #5, #11: Google marks them expired for fees while also estimating later terms; confirm on the official record if any design-around is to be relaxed.
 - USPTO full-text scan (idea 2 and idea 3 especially), Espacenet and WIPO not run.
 - Assignee searches for PagerDuty, Atlassian, Splunk, Pushover, Apple and Google not run.
@@ -98,6 +121,9 @@ None yet at `needs-review`. Open items that stop a "complete" mark:
 3. A5/A6: no provider selection by stored delivery-performance profiles (#10); escalation chain stays flat, with no supervisory tiers or data-source analytics (#6).
 4. App and queue carry one alert priority, no threshold priority, no priority reordering (#12, #13).
 5. No wearable-accessory acknowledgement path (#14), no motion-gesture acknowledgement (#22), no auto-pause of alerts by history (#17).
+6. A5: one acknowledgement step; no separate "accepted" state, and no timer that escalates after acceptance but before clearance (US8494481B1).
+7. A5/A6: a repeating alert is not gated by a battery-level setting combined with schedule time periods (US8825014B2).
+8. A2/A3: alerts are data pushes; no alert is triggered by detecting text in a message body (US9686398B2).
 
 ## Limitations
 AI-assisted search with a US-only general web search tool; patent text is machine-converted from Google Patents; statuses are Google's, not the official record; only independent claims were read in full (dependent claims read where quoted above); non-US patents and non-English patents were not searched; the search can miss a patent that uses different vocabulary ("page", "incident", "responder"). Not legal advice and not a freedom-to-operate opinion.
