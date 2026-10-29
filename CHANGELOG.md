@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.5
+- A5 design (docs only): escalation to a second person, meets sweep constraints 1-8; no code.
+
 ## 0.0.4
 - Patent sweep: USPTO reads of every remaining granted hit (14 patents); verdicts hold; three new design constraints. Docs only.
 
