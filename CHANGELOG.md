@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.13
+- A3: android/README build, lint and unit-test commands and the toolchain versions used; HANDOFF rewrite. Docs only.
+
 ## 0.0.12
 - Patent sweep: the three published applications (CA 2838076, US2024/0277934, US20160086473) read from Google Patents; all clear, two new design constraints (9: second notification never to a medical device; 10: one device per recipient). CA 2838076 claims are summarised, not verbatim. Docs only.
 
