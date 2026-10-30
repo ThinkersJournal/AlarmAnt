@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.14
+- HANDOFF rewrite (docs only).
+
 ## 0.0.13
 - A3: android/README build, lint and unit-test commands and the toolchain versions used; HANDOFF rewrite. Docs only.
 
