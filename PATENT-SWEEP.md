@@ -106,11 +106,21 @@ Constraint 6 (from US8494481B1): the escalation chain stays a single step: no al
 Constraint 7 (from US8825014B2): a repeating alert must not be gated by a battery-level setting combined with schedule time periods.
 Constraint 8 (from US9686398B2): do not trigger an alert by detecting text in a message body; the alert is a data push.
 
-Result: the claims of every granted hit named in this file have now been read on the USPTO record, as the PM required on 2026-10-26. The Google Patents text matched the USPTO text for every claim viewed. Left undone: Espacenet, WIPO and assignee-specific searches were NOT run; the "Expired - Fee Related" entries are still unconfirmed on the USPTO record; the three published applications (CA 2838076, US2024/0277934, US20160086473) are unread.
+Result: the claims of every granted hit named in this file have now been read on the USPTO record, as the PM required on 2026-10-26. The Google Patents text matched the USPTO text for every claim viewed. Left undone: Espacenet, WIPO and assignee-specific searches were NOT run; the "Expired - Fee Related" entries are still unconfirmed on the USPTO record; the three published applications (CA 2838076, US2024/0277934, US20160086473) were read on 2026-10-30 from Google Patents only (see "Applications read"), not on the USPTO or CIPO record.
+
+## Applications read (2026-10-30, Google Patents text only; not the USPTO/CIPO record)
+| Document | Assignee, status | Independent claims | Verdict |
+|---|---|---|---|
+| US20160086473A1 | Groves Internet Consulting; Expired (fee), granted as US9886840B2 (#6) | 1 (of 2 claims): external data source, analytical system, alert queue, notification system that sends to an end user and receives an acknowledgment receipt. Read verbatim | clear (superseded by #6, which is narrower; AlarmAnt has no analytical system that creates the notification from external data) |
+| US2024/0277934A1 | Medtronic Minimed; pending, so claims may still change | 1, 13, 20 (20 claims; all 20 read). Each needs a first notification unacknowledged at a mobile device within a time frame, then a second notification delivered to a MEDICAL DEVICE. Claim 1 read verbatim; 13 and 20 from a model summary of the page | clear while the second notification never goes to a medical device. New constraint 9 |
+| CA 2838076 (CA2838076C granted 2021-03-09) | BlackBerry; Active, est. to 2033-12-18 | 1, 8, 16 (16 claims). Claim 1: on a notification from a server, a primary device alerts and sends an acknowledgment so the other device stops alerting; a non-primary device starts a delay timer before alerting. Claim 16: acknowledgment sent over a second lower-latency connection. Summarised by a model from Google Patents, NOT read verbatim | clear for the current design (one device per recipient, no primary/secondary). New constraint 10; read the claims verbatim on CIPO before any multi-device feature |
+
+Constraint 9 (from US2024/0277934): A5's second notification goes to a person (push, SMS, voice), never to a medical device such as an insulin pump or glucose sensor.
+Constraint 10 (from CA 2838076): no primary/secondary arrangement across one recipient's devices, with a delay timer on the secondary and an acknowledgment that silences the other device.
 
 ## Needs review (to the PM)
 None yet at `needs-review`. Open items that stop a "complete" mark:
-- Not read: CA 2838076 (alert and acknowledgment processing, delay timer) and the applications US2024/0277934 and US20160086473; all granted hits are now read on the USPTO record.
+- CA 2838076, US2024/0277934 and US20160086473 are read (Google Patents text only, 2026-10-30; see "Applications read"). Not confirmed on the USPTO/CIPO record; CA 2838076 claims are summarised, not read verbatim.
 - #3, #4, #5, #11: Google marks them expired for fees while also estimating later terms; confirm on the official record if any design-around is to be relaxed.
 - USPTO full-text scan (idea 2 and idea 3 especially), Espacenet and WIPO not run.
 - Assignee searches for PagerDuty, Atlassian, Splunk, Pushover, Apple and Google not run.
@@ -124,6 +134,8 @@ None yet at `needs-review`. Open items that stop a "complete" mark:
 6. A5: one acknowledgement step; no separate "accepted" state, and no timer that escalates after acceptance but before clearance (US8494481B1).
 7. A5/A6: a repeating alert is not gated by a battery-level setting combined with schedule time periods (US8825014B2).
 8. A2/A3: alerts are data pushes; no alert is triggered by detecting text in a message body (US9686398B2).
+9. A5: the second notification goes to a person, never to a medical device (US2024/0277934).
+10. A3/A5: one device per recipient; no primary/secondary delay-timer arrangement between a recipient's devices (CA 2838076).
 
 ## Limitations
 AI-assisted search with a US-only general web search tool; patent text is machine-converted from Google Patents; statuses are Google's, not the official record; only independent claims were read in full (dependent claims read where quoted above); non-US patents and non-English patents were not searched; the search can miss a patent that uses different vocabulary ("page", "incident", "responder"). Not legal advice and not a freedom-to-operate opinion.
