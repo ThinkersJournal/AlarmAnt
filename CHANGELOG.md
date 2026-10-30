@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.9
+- A3: first build of android/ (debug APK assembles with JDK 17, Gradle 9.8.2, AGP 9.5.0, compileSdk 37). Added the Gradle wrapper (checksum-pinned); compileSdk 36 -> 37 as the dependencies require. Still unrun on a device or emulator. No Rust change.
+
 ## 0.0.8
 - A3: Android project skeleton under android/ (service, alarm playback, full-screen activity, ack worker, setup walkthrough) as UNBUILT files; excluded from the crate package. No Rust change.
 
