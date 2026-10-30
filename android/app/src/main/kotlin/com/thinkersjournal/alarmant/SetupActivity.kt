@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
@@ -33,14 +34,18 @@ class SetupActivity : ComponentActivity() {
         val nm = getSystemService(NotificationManager::class.java)
         val pm = getSystemService(PowerManager::class.java)
 
-        step("Notifications", ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+        // POST_NOTIFICATIONS is a runtime permission from API 33; earlier releases grant it at install.
+        step("Notifications", Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
         step("Do Not Disturb access", nm.isNotificationPolicyAccessGranted) {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
         }
-        step("Full-screen alerts", nm.canUseFullScreenIntent()) {
+        // Full-screen intents are a user-revocable setting only from API 34; earlier releases grant it at install.
+        step("Full-screen alerts", Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE ||
+            nm.canUseFullScreenIntent()) {
             startActivity(
                 Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName")),
             )

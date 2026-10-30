@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.10
+- A3: fixes from the first lint run. Foreground start now works on API 26-28 (ServiceCompat); setup walkthrough no longer reports Notifications/Full-screen as MISSING on releases that grant them at install; alert de-duplication evicts the oldest ids (StringSet was unordered); a repeat alarm start no longer leaks a wake lock; alarm tone falls back to ringtone then notification tone instead of staying silent. `lintDebug` passes with no errors. No Rust change.
+
 ## 0.0.9
 - A3: first build of android/ (debug APK assembles with JDK 17, Gradle 9.8.2, AGP 9.5.0, compileSdk 37). Added the Gradle wrapper (checksum-pinned); compileSdk 36 -> 37 as the dependencies require. Still unrun on a device or emulator. No Rust change.
 

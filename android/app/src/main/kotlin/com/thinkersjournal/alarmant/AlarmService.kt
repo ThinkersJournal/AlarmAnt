@@ -15,6 +15,7 @@ import android.media.RingtoneManager
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 
 /** Plays the alarm on the alarm stream at maximum volume until [ACTION_STOP]. */
 class AlarmService : Service() {
@@ -64,8 +65,9 @@ class AlarmService : Service() {
             .setContentIntent(pending)
             .setFullScreenIntent(pending, true)
             .build()
-        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
 
+        wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "alarmant:alarm")
             .apply { acquire(WAKE_LOCK_MS) }
@@ -75,17 +77,36 @@ class AlarmService : Service() {
         audio.setStreamVolume(AudioManager.STREAM_ALARM, audio.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0)
 
         player?.release()
-        player = MediaPlayer().apply {
-            setAudioAttributes(
+        player = null
+        // The default alarm tone can be unset or unreadable; fall back to the ringtone, then the
+        // notification tone, rather than leaving a critical alert silent.
+        for (type in listOf(RingtoneManager.TYPE_ALARM, RingtoneManager.TYPE_RINGTONE, RingtoneManager.TYPE_NOTIFICATION)) {
+            player = tryPlay(RingtoneManager.getDefaultUri(type)) ?: continue
+            break
+        }
+    }
+
+    private fun tryPlay(uri: android.net.Uri?): MediaPlayer? {
+        if (uri == null) return null
+        val p = MediaPlayer()
+        return try {
+            p.setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build(),
             )
-            setDataSource(this@AlarmService, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
-            isLooping = true
-            prepare()
-            start()
+            p.setDataSource(this, uri)
+            p.isLooping = true
+            p.prepare()
+            p.start()
+            p
+        } catch (e: java.io.IOException) {
+            p.release()
+            null
+        } catch (e: IllegalStateException) {
+            p.release()
+            null
         }
     }
 
