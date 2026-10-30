@@ -6,6 +6,7 @@ import android.content.Context
 object AlertLog {
     private const val FILE = "alertlog"
     private const val SEEN = "seen_ordered"
+    internal const val MAX = 200
 
     // ASCII unit separator: cannot appear in a printable alert id, unlike a comma or newline.
     private const val SEP = "\u001F"
@@ -17,10 +18,15 @@ object AlertLog {
     fun firstSight(c: Context, alertId: String): Boolean {
         // Stored oldest first: a StringSet is unordered, so it could not evict the oldest.
         val seen = prefs(c).getString(SEEN, "").orEmpty().split(SEP).filter { it.isNotEmpty() }
-        if (alertId in seen) return false
-        // Keep the newest 200 ids only; the list is a de-duplication window, not a history.
-        val next = (seen + alertId).takeLast(200).joinToString(SEP)
-        prefs(c).edit().putString(SEEN, next).apply()
+        val next = window(seen, alertId) ?: return false
+        prefs(c).edit().putString(SEEN, next.joinToString(SEP)).apply()
         return true
     }
+
+    /**
+     * The window after seeing [alertId], or null if it was already in [seen]. Keeps the newest
+     * [MAX] ids only: the list is a de-duplication window, not a history.
+     */
+    internal fun window(seen: List<String>, alertId: String): List<String>? =
+        if (alertId in seen) null else (seen + alertId).takeLast(MAX)
 }

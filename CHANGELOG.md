@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.11
+- A3: first unit tests (JUnit, no device): the alert de-duplication window (accept, reject repeat, evict oldest at 200). The window logic is now a pure function. No Rust change.
+
 ## 0.0.10
 - A3: fixes from the first lint run. Foreground start now works on API 26-28 (ServiceCompat); setup walkthrough no longer reports Notifications/Full-screen as MISSING on releases that grant them at install; alert de-duplication evicts the oldest ids (StringSet was unordered); a repeat alarm start no longer leaks a wake lock; alarm tone falls back to ringtone then notification tone instead of staying silent. `lintDebug` passes with no errors. No Rust change.
 
