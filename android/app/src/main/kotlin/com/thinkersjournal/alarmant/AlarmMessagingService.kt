@@ -22,6 +22,8 @@ class AlarmMessagingService : FirebaseMessagingService() {
         ContextCompat.startForegroundService(this, intent)
     }
 
+    // firebase-messaging 26.0.1 marks this deprecated without naming a replacement in the class.
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun onNewToken(token: String) {
         // Device registration with the sender is not designed yet (DESIGN-A2 open question: ack auth).
         getSharedPreferences("config", MODE_PRIVATE).edit().putString("fcm_token", token).apply()
