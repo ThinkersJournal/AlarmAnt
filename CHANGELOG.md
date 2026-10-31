@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.24
+- A2: `fcm` module: FCM HTTP v1 alert body (high-priority data message, no notification block, bounded TTL), `DeviceToken` (never prints), `PushTransport` and `SecretSource` traits. No network code yet. DESIGN-A2 records the PM ruling of 2026-10-31.
+
 ## 0.0.23
 - A3/A8: instrumented tests for the alarm path (6 tests, pass on API 36); fix: ACTION_STOP used stopSelf(), which dropped a START queued behind it and crashed with ForegroundServiceDidNotStartInTime (now stopSelf(startId)). CI jobs `android` and `android-instrumented`.
 

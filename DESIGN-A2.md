@@ -1,6 +1,6 @@
 # A2 design: sender and acknowledge endpoint
 
-Status: DESIGN ONLY. No sender code until the PM answers (ant-first notice, 2026-10-28).
+Status: BUILDING (PM ruling 2026-10-31, option 2): a Rust service on the VPS. Real Ants where they exist (HTTPAnt `httpant-client` for the FCM HTTP v1 call, ConfigurAnt, PersistAnt); NotificAnt, APIAnt and SecretAnt are 0.0.0 placeholders, so they stay behind traits (`PushTransport`, `SecretSource`, `AlertStore`) with a small direct implementation, swapped in as they ship. The earlier "no sender code" hold (ant-first notice 2026-10-28) is lifted.
 Constraints: PATENT-SWEEP.md design constraints apply (one alert priority, per-app override, flat escalation).
 
 ## Flow
@@ -30,6 +30,9 @@ NotificAnt is not designed yet. AlarmAnt requires of it: send a high-priority FC
 
 ## Host: recommendation to CireSnave (not a decision)
 Rust service on the VPS rather than a Cloudflare Worker, because a Worker cannot use the Rust Ants. No code.
+
+## Service-account key (PM accepted 2026-10-31)
+A file on the VPS outside any repo, mode 0600. Its path is a ConfigurAnt key (`fcm.service_account_file`, env `ALARMANT_FCM_SERVICE_ACCOUNT_FILE`); the JSON is read through the `SecretSource` trait (a file implementation now, SecretAnt later). Never inlined in an env var, never logged, never in a repo.
 
 ## Resolved / open questions
 - Ack auth: per-device token issued at registration; needs SecretAnt/APIAnt guidance.
