@@ -28,6 +28,7 @@ class AlarmService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                ActiveAlarm.clear(this)
                 stopAlarm()
                 stopSelf()
             }
@@ -37,35 +38,14 @@ class AlarmService : Service() {
     }
 
     private fun start(intent: Intent?) {
-        val alertId = intent?.getStringExtra(EXTRA_ALERT_ID).orEmpty()
-        val title = intent?.getStringExtra(EXTRA_TITLE).orEmpty().ifEmpty { "Alert" }
-        val body = intent?.getStringExtra(EXTRA_BODY).orEmpty()
-
-        val channel = NotificationChannel(CHANNEL, "Alarms", NotificationManager.IMPORTANCE_HIGH)
-        // Honoured only while notification policy access is granted (SetupActivity asks for it).
-        channel.setBypassDnd(true)
-        channel.setSound(null, null)
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-
-        val open = Intent(this, AlarmActivity::class.java)
-            .putExtra(EXTRA_ALERT_ID, alertId)
-            .putExtra(EXTRA_TITLE, title)
-            .putExtra(EXTRA_BODY, body)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val pending = PendingIntent.getActivity(
-            this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        val alert = ActiveAlarm.Alert(
+            intent?.getStringExtra(EXTRA_ALERT_ID).orEmpty(),
+            intent?.getStringExtra(EXTRA_TITLE).orEmpty().ifEmpty { "Alert" },
+            intent?.getStringExtra(EXTRA_BODY).orEmpty(),
         )
-        val notification = NotificationCompat.Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setOngoing(true)
-            .setContentIntent(pending)
-            .setFullScreenIntent(pending, true)
-            .build()
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        ActiveAlarm.set(this, alert)
+        ensureChannel(this)
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(this, alert), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
 
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = getSystemService(PowerManager::class.java)
@@ -128,13 +108,52 @@ class AlarmService : Service() {
     }
 
     companion object {
+        fun startIntent(c: Context, alert: ActiveAlarm.Alert): Intent =
+            Intent(c, AlarmService::class.java)
+                .setAction(ACTION_START)
+                .putExtra(EXTRA_ALERT_ID, alert.id)
+                .putExtra(EXTRA_TITLE, alert.title)
+                .putExtra(EXTRA_BODY, alert.body)
+
+        fun ensureChannel(c: Context) {
+            val channel = NotificationChannel(CHANNEL, "Alarms", NotificationManager.IMPORTANCE_HIGH)
+            // Honoured only while notification policy access is granted (SetupActivity asks for it).
+            channel.setBypassDnd(true)
+            channel.setSound(null, null)
+            c.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+
+        /** [recover]: the activity must start the service itself (see BootReceiver). */
+        fun notification(c: Context, alert: ActiveAlarm.Alert, recover: Boolean = false): Notification {
+            val open = Intent(c, AlarmActivity::class.java)
+                .putExtra(EXTRA_ALERT_ID, alert.id)
+                .putExtra(EXTRA_TITLE, alert.title)
+                .putExtra(EXTRA_BODY, alert.body)
+                .putExtra(EXTRA_RECOVER, recover)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val pending = PendingIntent.getActivity(
+                c, 0, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            return NotificationCompat.Builder(c, CHANNEL)
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentTitle(alert.title)
+                .setContentText(alert.body)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setOngoing(true)
+                .setContentIntent(pending)
+                .setFullScreenIntent(pending, true)
+                .build()
+        }
+
         const val ACTION_START = "com.thinkersjournal.alarmant.START"
         const val ACTION_STOP = "com.thinkersjournal.alarmant.STOP"
         const val EXTRA_ALERT_ID = "alert_id"
         const val EXTRA_TITLE = "title"
         const val EXTRA_BODY = "body"
+        const val EXTRA_RECOVER = "recover"
         private const val CHANNEL = "alarms"
-        private const val NOTIFICATION_ID = 1
+        const val NOTIFICATION_ID = 1
         private const val WAKE_LOCK_MS = 10L * 60 * 1000
     }
 }

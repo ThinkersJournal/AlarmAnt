@@ -1,3 +1,3 @@
 # HANDOFF: AlarmAnt
 
-IDLE after emulator run 2 (PR a3-emulator-rows, 0.0.16). Findings in android/README "Emulator run 2": silent under Total Silence DND, START_NOT_STICKY loses the alarm on process death, no boot receiver. Board asks: real FCM (CireSnave's Firebase file) and a physical device. AVD `alarm36` in `C:\Users\cires\lane-tools\alarmant`; emulator stopped. Rules: Sonnet, FULL SPEED (`C:\Projects\THROTTLE.md`), questions to the PM only.
+Doing PM rows in order: (1) boot receiver = PR a3-boot-receiver 0.0.17 (done, awaiting gate); (2) START_REDELIVER_INTENT / process-death recovery (reuse ActiveAlarm); (3) Total Silence DND handling in SetupActivity. One PR each, [READY] with ran vs not. Emulator: AVD `alarm36` in `C:\Users\cires\lane-tools\alarmant` (needs `adb root` for non-exported service calls; BOOT_COMPLETED arrives ~90 s after boot). Rules: Sonnet, FULL SPEED, questions to the PM only.
