@@ -39,6 +39,11 @@ class AlarmActivity : ComponentActivity() {
             gravity = Gravity.CENTER
             setPadding(48, 48, 48, 48)
         }
+        if (TotalSilence.isOn(this)) column.addView(TextView(this).apply {
+            text = TotalSilence.WARNING
+            textSize = 20f
+            gravity = Gravity.CENTER
+        })
         column.addView(TextView(this).apply {
             text = intent.getStringExtra(AlarmService.EXTRA_TITLE).orEmpty()
             textSize = 32f
