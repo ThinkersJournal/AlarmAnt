@@ -123,7 +123,7 @@ None yet at `needs-review`. Open items that stop a "complete" mark:
 - CA 2838076, US2024/0277934 and US20160086473 are read (Google Patents text only, 2026-10-30; see "Applications read"). Not confirmed on the USPTO/CIPO record; CA 2838076 claims are summarised, not read verbatim.
 - #3, #4, #5, #11: Google marks them expired for fees while also estimating later terms; confirm on the official record if any design-around is to be relaxed.
 - USPTO full-text scan (idea 2 and idea 3 especially), Espacenet and WIPO not run.
-- Assignee searches for PagerDuty, Atlassian, Splunk, Pushover, Apple and Google not run.
+- Assignee searches: 3 web queries run 2026-10-31 (Opsgenie/Atlassian escalation; Splunk On-Call/VictorOps escalation; PagerDuty self-test/synthetic notification). All three returned product docs and forum posts and NO patent page, so the null proves nothing: the same search tool reached Google Patents for Q1 to Q4 and Q6 but not here (no positive control for assignee queries). Pushover, Apple and Google not run. These need a patent-database route (USPTO assignee field, Espacenet) the lane's tools do not reach; the PM decides whether to accept the sweep as it stands.
 
 ## Design constraints this sweep imposes (until superseded by a complete sweep)
 1. A3: override is per app, on whenever the app is installed; no per-sender flag combined with a time window (#3).
