@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.20
+- A3: AlarmActivity follows Do Not Disturb live (Total Silence warning appears or clears while the alarm sounds). Emulator rows: fresh-install kill, Recents swipe measured. Docs and activity only.
+
 ## 0.0.19
 - A3: Total Silence warning in SetupActivity and AlarmActivity (the platform mutes the alarm there and no app can bypass it).
 
