@@ -1,6 +1,7 @@
 package com.thinkersjournal.alarmant
 
 import android.content.Context
+import androidx.core.content.edit
 
 /** Remembers which alert ids have been seen, so a repeated push does not re-arm an alarm. */
 object AlertLog {
@@ -19,7 +20,7 @@ object AlertLog {
         // Stored oldest first: a StringSet is unordered, so it could not evict the oldest.
         val seen = prefs(c).getString(SEEN, "").orEmpty().split(SEP).filter { it.isNotEmpty() }
         val next = window(seen, alertId) ?: return false
-        prefs(c).edit().putString(SEEN, next.joinToString(SEP)).apply()
+        prefs(c).edit { putString(SEEN, next.joinToString(SEP)) }
         return true
     }
 

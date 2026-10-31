@@ -16,6 +16,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import android.annotation.SuppressLint
 
 /** Plays the alarm on the alarm stream at maximum volume until [ACTION_STOP]. */
 class AlarmService : Service() {
@@ -41,6 +42,8 @@ class AlarmService : Service() {
         return START_REDELIVER_INTENT
     }
 
+    // InlinedApi: the mediaPlayback type is API 29; ServiceCompat ignores the type below Q.
+    @SuppressLint("InlinedApi")
     private fun start(intent: Intent?) {
         // A restart with a null intent (never expected with REDELIVER) falls back to the saved alert.
         val alert = if (intent?.hasExtra(EXTRA_ALERT_ID) == true) {
