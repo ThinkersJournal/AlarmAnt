@@ -8,6 +8,7 @@
 
 pub mod ack;
 pub mod fcm;
+pub mod raise;
 
 use std::fmt;
 
