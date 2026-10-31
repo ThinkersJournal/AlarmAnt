@@ -6,6 +6,7 @@
 //! arrives; sending goes through the [`AlertChannel`] trait.
 #![forbid(unsafe_code)]
 
+pub mod ack;
 pub mod fcm;
 
 use std::fmt;
