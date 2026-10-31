@@ -1,8 +1,13 @@
 package com.thinkersjournal.alarmant
 
+import android.app.NotificationManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -19,6 +24,13 @@ import androidx.work.workDataOf
 
 /** Full-screen alert. Acknowledge is the only way out: no back, no swipe, no gesture. */
 class AlarmActivity : ComponentActivity() {
+
+    private lateinit var filterReceiver: BroadcastReceiver
+
+    override fun onDestroy() {
+        unregisterReceiver(filterReceiver)
+        super.onDestroy()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,11 +51,22 @@ class AlarmActivity : ComponentActivity() {
             gravity = Gravity.CENTER
             setPadding(48, 48, 48, 48)
         }
-        if (TotalSilence.isOn(this)) column.addView(TextView(this).apply {
+        val silenceWarning = TextView(this).apply {
             text = TotalSilence.WARNING
             textSize = 20f
             gravity = Gravity.CENTER
-        })
+        }
+        column.addView(silenceWarning)
+        // Total Silence can be switched on while the alarm is sounding: follow the filter live.
+        val refresh = { silenceWarning.visibility = if (TotalSilence.isOn(this)) View.VISIBLE else View.GONE }
+        refresh()
+        filterReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) = refresh()
+        }
+        ContextCompat.registerReceiver(
+            this, filterReceiver, IntentFilter(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         column.addView(TextView(this).apply {
             text = intent.getStringExtra(AlarmService.EXTRA_TITLE).orEmpty()
             textSize = 32f
