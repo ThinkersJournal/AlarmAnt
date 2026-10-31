@@ -6,6 +6,8 @@
 //! arrives; sending goes through the [`AlertChannel`] trait.
 #![forbid(unsafe_code)]
 
+pub mod fcm;
+
 use std::fmt;
 
 /// Where an alert stands. Flat chain: person 1, then person 2, no third tier.
