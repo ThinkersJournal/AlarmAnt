@@ -35,4 +35,5 @@ Rust service on the VPS rather than a Cloudflare Worker, because a Worker cannot
 A file on the VPS outside any repo, mode 0600. Its path is a ConfigurAnt key (`fcm.service_account_file`, env `ALARMANT_FCM_SERVICE_ACCOUNT_FILE`); the JSON is read through the `SecretSource` trait (a file implementation now, SecretAnt later). Never inlined in an env var, never logged, never in a repo.
 
 ## Resolved / open questions
-- Ack auth: per-device token issued at registration; needs SecretAnt/APIAnt guidance.
+- Ack auth (A4, built in `src/ack.rs`): the phone sends `Authorization: Bearer <ack token>`; the sender compares it in constant time with the token stored on the alert record. Answers: 200 first ack and repeats, 401 bad or missing token, 404 unknown alert (401/404 are final, the phone should stop retrying; `AckWorker` still retries every non-2xx, a follow-up). Still open: how the token is issued at device registration (random 32 bytes, stored beside the FCM token), and its storage in PersistAnt.
+- A 404 versus 401 tells a caller whether an alert id exists. Accepted: ids are random and only ever sent to the device.

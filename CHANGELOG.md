@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.25
+- A4: `ack` module: framework-free `POST /ack/{alert_id}` handler (`acknowledge`), `AckToken` (constant-time compare, never prints), `AlertStore` trait with `MemoryStore`, per-alert record (state, sent_at, acked_at). First ack answers 200 once, a retry 200, wrong or missing token 401, unknown alert 404. 10 unit tests including 16 racing acks. No HTTP server or durable store yet.
+
 ## 0.0.24
 - A2: `fcm` module: FCM HTTP v1 alert body (high-priority data message, no notification block, bounded TTL), `DeviceToken` (never prints), `PushTransport` and `SecretSource` traits. No network code yet. DESIGN-A2 records the PM ruling of 2026-10-31.
 
