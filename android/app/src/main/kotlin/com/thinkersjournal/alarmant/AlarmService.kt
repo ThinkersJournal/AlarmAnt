@@ -31,18 +31,26 @@ class AlarmService : Service() {
                 ActiveAlarm.clear(this)
                 stopAlarm()
                 stopSelf()
+                return START_NOT_STICKY
             }
             else -> start(intent)
         }
-        return START_NOT_STICKY
+        // If the process dies mid-alarm the system restarts the service with this same intent;
+        // only Acknowledge (ACTION_STOP) ends it.
+        return START_REDELIVER_INTENT
     }
 
     private fun start(intent: Intent?) {
-        val alert = ActiveAlarm.Alert(
-            intent?.getStringExtra(EXTRA_ALERT_ID).orEmpty(),
-            intent?.getStringExtra(EXTRA_TITLE).orEmpty().ifEmpty { "Alert" },
-            intent?.getStringExtra(EXTRA_BODY).orEmpty(),
-        )
+        // A restart with a null intent (never expected with REDELIVER) falls back to the saved alert.
+        val alert = if (intent?.hasExtra(EXTRA_ALERT_ID) == true) {
+            ActiveAlarm.Alert(
+                intent.getStringExtra(EXTRA_ALERT_ID).orEmpty(),
+                intent.getStringExtra(EXTRA_TITLE).orEmpty().ifEmpty { "Alert" },
+                intent.getStringExtra(EXTRA_BODY).orEmpty(),
+            )
+        } else {
+            ActiveAlarm.get(this) ?: ActiveAlarm.Alert("", "Alert", "")
+        }
         ActiveAlarm.set(this, alert)
         ensureChannel(this)
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(this, alert), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)

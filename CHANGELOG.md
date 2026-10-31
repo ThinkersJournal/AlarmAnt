@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.18
+- A3: process-death recovery. AlarmService returns START_REDELIVER_INTENT, so the system restarts a killed alarm until Acknowledge (STOP stays NOT_STICKY).
+
 ## 0.0.17
 - A3: alarms survive a reboot. ActiveAlarm persists the sounding alert until Acknowledge; BootReceiver restarts it (falls back to a full-screen notification if Android refuses the foreground start).
 
