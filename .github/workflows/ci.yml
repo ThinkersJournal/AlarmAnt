@@ -75,7 +75,7 @@ jobs:
         run: |
           printf '%s' '{"project_info":{"project_number":"1","project_id":"placeholder","storage_bucket":"placeholder.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:1:android:0000000000000000","android_client_info":{"package_name":"com.thinkersjournal.alarmant"}},"api_key":[{"current_key":"placeholder"}]}],"configuration_version":"1"}' > app/google-services.json
       - name: Build, lint, unit tests
-        run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest clean :app:lintDebug
+        run: ./gradlew --no-daemon clean :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 
   # The alarm path on a real Android system image (service, alarm-stream playback, Acknowledge).
   android-instrumented:
@@ -103,6 +103,17 @@ jobs:
           arch: x86_64
           working-directory: android
           script: ./gradlew --no-daemon :app:connectedDebugAndroidTest
+      - name: Show failed instrumented tests
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as E
+          for f in glob.glob('android/app/build/outputs/androidTest-results/connected/**/*.xml', recursive=True):
+              for c in E.parse(f).getroot().iter('testcase'):
+                  x = c.find('failure')
+                  if x is not None:
+                      print(c.get('name'), '::', (x.text or x.get('message') or '')[:1500])
+          PY
 
   # Advisory (PM TASK 2026-10-24): NOT a required check and no rule is silenced here. The called workflow fixes the rule profile and the
   # CodeRipper version; this repository passes nothing (it is public, so the default GitHub-hosted runner is right).
