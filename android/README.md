@@ -29,3 +29,10 @@ Needs a placeholder `app/google-services.json` (package `com.thinkersjournal.ala
 Measured: START intent -> service foreground (mediaPlayback), MediaPlayer `USAGE_ALARM` started, alarm volume 6 -> 7 (max); locked screen -> `AlarmActivity` on top; Back ignored; Acknowledge -> 0 alarm players, 0 foreground services, volume back to 6, activity gone, ack work enqueued (its network constraint not exercised).
 
 Not covered: real FCM delivery, DND bypass (no policy grant), audible output (`-no-audio`), battery-optimisation exemption, a physical device, process death and reboot. Finding: `STOP` sent via `startForegroundService` crashes (`ForegroundServiceDidNotStartInTimeException`); the app uses `startService`, so only external callers hit it.
+
+### Emulator run 2 (2026-10-30; waits of 12 s needed: cold process start with Firebase init takes about 6 s)
+
+- **DND, no policy grant:** Priority-only: alarm player started, `mutedState:none`, stream not muted. Total Silence (`zen_mode=2`): player reports started but `mutedState:opPlayAudio`, alarm stream `Muted: true`. **The alarm is silent under Total Silence** (a platform rule apps cannot bypass); Alarms-only was not run. The channel shows `mBypassDnd=false` without the policy grant. Decision for CireSnave/PM: tell users to avoid Total Silence, or detect `INTERRUPTION_FILTER_NONE` and say so in SetupActivity.
+- **Process death:** `kill -9` of the app process while alarming: 0 players, 0 foreground services after 6 s. `START_NOT_STICKY` means a crash or OOM kill silences an active alarm and nothing restarts it. Row: consider `START_REDELIVER_INTENT`, or re-raise from the ack-pending state.
+- **Reboot:** the manifest has no `BOOT_COMPLETED` receiver, so an active alarm cannot survive a reboot (inferred from the manifest; the emulator hung in the reboot run, so it was not measured).
+- **Battery whitelist:** `cmd deviceidle whitelist +pkg` works from `adb root`; that only shows the whitelist is accepted. The in-app request flow was not driven.
