@@ -32,7 +32,9 @@ class AlarmService : Service() {
                 ActiveAlarm.clear(this)
                 AlarmWatchdog.cancel(this)
                 stopAlarm()
-                stopSelf()
+                // startId, not stopSelf(): a START queued behind this STOP (a new alert arriving as the
+                // last one is acknowledged) must still run, or its startForegroundService() times out.
+                stopSelf(startId)
                 return START_NOT_STICKY
             }
             else -> start(intent)

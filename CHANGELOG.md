@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.23
+- A3/A8: instrumented tests for the alarm path (6 tests, pass on API 36); fix: ACTION_STOP used stopSelf(), which dropped a START queued behind it and crashed with ForegroundServiceDidNotStartInTime (now stopSelf(startId)). CI jobs `android` and `android-instrumented`.
+
 ## 0.0.22
 - A3: Android lint run on main (25 warnings -> 9, 0 errors); fixes and dispositions in android/README "Lint". KTX prefs/Uri helpers, backup rules, API 26 lock-screen flags, InlinedApi suppressions with reasons.
 
