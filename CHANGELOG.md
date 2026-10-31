@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.15
+- A3: first run on an emulator (API 36 google_apis x86_64, WHPX): foreground alarm service, max-volume alarm-stream playback, full-screen AlarmActivity on a locked screen, back blocked, Acknowledge stops audio/service and restores volume. Docs only.
+
 ## 0.0.14
 - HANDOFF rewrite (docs only).
 
