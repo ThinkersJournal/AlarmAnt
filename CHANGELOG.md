@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.19
+- A3: Total Silence warning in SetupActivity and AlarmActivity (the platform mutes the alarm there and no app can bypass it).
+
 ## 0.0.18
 - A3: process-death recovery. AlarmService returns START_REDELIVER_INTENT, so the system restarts a killed alarm until Acknowledge (STOP stays NOT_STICKY).
 

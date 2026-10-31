@@ -35,6 +35,11 @@ class SetupActivity : ComponentActivity() {
         val pm = getSystemService(PowerManager::class.java)
 
         // POST_NOTIFICATIONS is a runtime permission from API 33; earlier releases grant it at install.
+        // Not a grant the user can give the app: a state to warn about. Shown first, in full.
+        if (TotalSilence.isOn(this)) column.addView(TextView(this).apply {
+            text = "WARNING: " + TotalSilence.WARNING
+            textSize = 20f
+        })
         step("Notifications", Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED) {
