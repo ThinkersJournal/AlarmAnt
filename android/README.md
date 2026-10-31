@@ -56,3 +56,11 @@ Left, with the reason:
 - `SetTextI18n` x6: the UI is built in code with English literals on purpose (single-user app, no `strings.xml`). Accepted until localisation is wanted.
 
 Emulator smoke after the edits (API 36): alarm sounding, `activealarm` prefs written, `kill -9` -> back in 2 s (watchdog), Acknowledge -> 0 players and empty prefs; SetupActivity renders all steps. Not run: tapping each Fix button after the `toUri()` change, an API 26 device, the Play-policy items.
+
+## Instrumented tests and CI (0.0.23)
+
+`./gradlew :app:connectedDebugAndroidTest` with an emulator or device attached (6 tests: `AlarmPathTest`, `ActiveAlarmTest`): start plays on the alarm stream at max volume and records the alert; a repeated start does not restart the audio; STOP silences, clears the saved alert and restores the volume; the notification is on the `alarms` channel with a full-screen intent; AlarmActivity ignores Back and Acknowledge finishes it and stops the alarm. Run on the API 36 `alarm36` AVD: 6 of 6 pass. **The suite found a defect** that the manual runs missed: with the first version of the STOP handling, `stopSelf()` dropped a START queued behind it and the app crashed (`ForegroundServiceDidNotStartInTimeException`) when a new alert arrived as the previous was acknowledged; the run failed with the old code and passes with `stopSelf(startId)`. Uninstall the app first if the emulator holds a build signed with another key (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`).
+
+Stay manual (the OS has to act on the process or system settings): process kill and watchdog recovery, reboot, Do Not Disturb, Recents swipe (see "Emulator run").
+
+CI (`.github/workflows/ci.yml`): job `android` (assembleDebug, unit tests, lint; placeholder `google-services.json`) and job `android-instrumented` (the tests above on an API 36 google_apis x86_64 emulator with KVM). **Neither was run on GitHub before this PR**: their first result is the PR's own checks. They are not branch-protection requirements until the PM adds them.
