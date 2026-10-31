@@ -116,6 +116,17 @@ pub async fn raise_alert(
     if !authorised {
         return Err(RaiseError::Unauthorized);
     }
+    raise_authorised(body, devices, transport, store, now).await
+}
+
+/// [`raise_alert`] for a caller already trusted (the daily self-test, inside the service).
+pub async fn raise_authorised(
+    body: &str,
+    devices: &dyn DeviceRegistry,
+    transport: &impl PushTransport,
+    store: &dyn AlertStore,
+    now: u64,
+) -> Result<String, RaiseError> {
     let req = parse_request(body)?;
     let device = devices.device().ok_or(RaiseError::NoDevice)?;
     let alert_id = new_alert_id();

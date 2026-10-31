@@ -9,7 +9,7 @@ Ruled by CireSnave 2026-10-26 (decision 287 S15 c, A): build it as its own proje
 | A3 | Android app: foreground alarm on the alarm volume stream at maximum, full-screen alert, repeats until Acknowledge, one-time Do-Not-Disturb permission and battery-optimisation exemption walkthrough | open | lane; needs a real phone |
 | A4 | Acknowledge call back to the sender; per-alert state | handler + in-memory store built (0.0.25); HTTP route, PersistAnt store, token issue open | lane |
 | A5 | Escalation: unacknowledged after N minutes tries a second person by text or call (a few cents each); design after A1 | open | blocked on A1 |
-| A6 | Daily self-test alarm that proves the whole chain; a missed ack the next morning is the failure signal | open | lane |
+| A6 | Daily self-test alarm that proves the whole chain; a missed ack the next morning is the failure signal | logic built (0.0.28); scheduler loop, persisted state, failure notifier open | lane |
 | A7 | Sideload (no Play Store fee) build and install notes | open | lane |
 | A8 | CI for the Android build, signed release artefact policy | open | lane; CireSnave for the signing key |
 | A9 | API for other projects to raise an alert (one small, documented call) | handler + docs built (0.0.27); HTTP route, key config, device registration open | lane |
