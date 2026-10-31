@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.ComponentActivity
+import androidx.core.content.ContextCompat
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
@@ -22,6 +23,11 @@ class AlarmActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val alertId = intent.getStringExtra(AlarmService.EXTRA_ALERT_ID).orEmpty()
+        // Reboot recovery: the receiver could not start the service from the background; the
+        // activity is visible now, so it can. Not on a recreate (savedInstanceState != null).
+        if (savedInstanceState == null && intent.getBooleanExtra(AlarmService.EXTRA_RECOVER, false)) {
+            ActiveAlarm.get(this)?.let { ContextCompat.startForegroundService(this, AlarmService.startIntent(this, it)) }
+        }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = Unit

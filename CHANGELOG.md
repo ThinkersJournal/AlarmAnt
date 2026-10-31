@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.17
+- A3: alarms survive a reboot. ActiveAlarm persists the sounding alert until Acknowledge; BootReceiver restarts it (falls back to a full-screen notification if Android refuses the foreground start).
+
 ## 0.0.16
 - A3: emulator runs for DND, process death, reboot and battery whitelist; findings in android/README. Docs only.
 
