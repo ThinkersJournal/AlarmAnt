@@ -1,6 +1,6 @@
 # AlarmAnt Android app (A3)
 
-**Builds** (`:app:assembleDebug`, 2026-10-30) with JDK 17 (Temurin 17.0.20.1), Gradle 9.8.2 wrapper, AGP 9.5.0, compileSdk 37. **Never run** on a device or emulator.
+**Builds** (`:app:assembleDebug`, 2026-10-30) with JDK 17 (Temurin 17.0.20.1), Gradle 9.8.2 wrapper, AGP 9.5.0, compileSdk 37. **Run on an emulator 2026-10-30** (see "Emulator run"); never on a physical device, no real FCM push.
 
 Remaining gaps:
 - `app/google-services.json` (the Firebase project) is CireSnave's and is git-ignored; the plugin fails without it. A placeholder file is enough to build, not to receive pushes.
@@ -19,3 +19,13 @@ Needs JDK 17 and an Android SDK (platform 37.0, build-tools 37.0.0). Set `JAVA_H
 One build at a time. Unit tests cover pure logic only (`AlertLog.window`); the alarm path itself needs a device or emulator and has not been run.
 
 Design: `DESIGN-A3.md`. Flow: `AlarmMessagingService` (data push) -> `AlarmService` (alarm stream, max volume, looping, full-screen notification) -> `AlarmActivity` (Acknowledge is the only exit) -> `AckWorker` (WorkManager retry).
+
+## Emulator run (2026-10-30, CireSnave: "Yes, install the emulator image for AlarmAnt.")
+
+Package ids (SDK manager, under `lane-tools\alarmant\sdk`): `emulator` 37.2.13, `system-images;android-36;google_apis;x86_64` rev 7 (4.3 GB unpacked; emulator 1.1 GB). AVD `alarm36`, made without `-d` (`avdmanager -d pixel_6` fails on the image's `devices.xml`); point `ANDROID_AVD_HOME` at a lane-tools folder. WHPX works with no admin step. Cold boot 215 s: `emulator -avd alarm36 -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -memory 2048`.
+
+Needs a placeholder `app/google-services.json` (package `com.thinkersjournal.alarmant`). The shell can start the non-exported service only after `adb root` (google_apis images allow it). Use `MSYS_NO_PATHCONV=1` for `/sdcard` paths; `adb shell` re-splits extras containing spaces.
+
+Measured: START intent -> service foreground (mediaPlayback), MediaPlayer `USAGE_ALARM` started, alarm volume 6 -> 7 (max); locked screen -> `AlarmActivity` on top; Back ignored; Acknowledge -> 0 alarm players, 0 foreground services, volume back to 6, activity gone, ack work enqueued (its network constraint not exercised).
+
+Not covered: real FCM delivery, DND bypass (no policy grant), audible output (`-no-audio`), battery-optimisation exemption, a physical device, process death and reboot. Finding: `STOP` sent via `startForegroundService` crashes (`ForegroundServiceDidNotStartInTimeException`); the app uses `startService`, so only external callers hit it.
