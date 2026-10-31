@@ -1,6 +1,7 @@
 package com.thinkersjournal.alarmant
 
 import android.content.Context
+import androidx.core.content.edit
 
 /** The alarm that is sounding now, kept on disk so a reboot can bring it back. Cleared only by Acknowledge. */
 object ActiveAlarm {
@@ -12,7 +13,9 @@ object ActiveAlarm {
 
     fun set(c: Context, alert: Alert) {
         // commit(), not apply(): a reboot or kill right after the push must not lose it.
-        prefs(c).edit().putString("id", alert.id).putString("title", alert.title).putString("body", alert.body).commit()
+        prefs(c).edit(commit = true) {
+            putString("id", alert.id).putString("title", alert.title).putString("body", alert.body)
+        }
     }
 
     fun get(c: Context): Alert? {
@@ -22,6 +25,6 @@ object ActiveAlarm {
     }
 
     fun clear(c: Context) {
-        prefs(c).edit().clear().commit()
+        prefs(c).edit(commit = true) { clear() }
     }
 }

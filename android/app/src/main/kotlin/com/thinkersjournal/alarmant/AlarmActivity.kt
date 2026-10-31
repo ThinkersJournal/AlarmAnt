@@ -21,6 +21,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.Constraints
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import android.os.Build
+import android.view.WindowManager
 
 /** Full-screen alert. Acknowledge is the only way out: no back, no swipe, no gesture. */
 class AlarmActivity : ComponentActivity() {
@@ -34,6 +36,13 @@ class AlarmActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // showWhenLocked / turnScreenOn in the manifest need API 27; API 26 takes the window flags.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
+            )
+        }
         val alertId = intent.getStringExtra(AlarmService.EXTRA_ALERT_ID).orEmpty()
         // Reboot recovery: the receiver could not start the service from the background; the
         // activity is visible now, so it can. Not on a recreate (savedInstanceState != null).

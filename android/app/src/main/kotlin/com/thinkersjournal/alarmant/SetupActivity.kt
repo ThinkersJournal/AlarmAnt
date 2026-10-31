@@ -5,7 +5,6 @@ import android.app.AlarmManager
 import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -15,6 +14,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import android.annotation.SuppressLint
 
 /** One-time walkthrough. Re-reads every grant on each resume and lists what is still missing. */
 class SetupActivity : ComponentActivity() {
@@ -29,6 +30,9 @@ class SetupActivity : ComponentActivity() {
         setContentView(column)
     }
 
+    // InlinedApi: every newer-API constant below is reached only on a release that has it; each step
+    // reports "granted" on older releases, so its fix action never runs there.
+    @SuppressLint("InlinedApi")
     override fun onResume() {
         super.onResume()
         column.removeAllViews()
@@ -53,19 +57,19 @@ class SetupActivity : ComponentActivity() {
         step("Full-screen alerts", Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE ||
             nm.canUseFullScreenIntent()) {
             startActivity(
-                Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName")),
+                Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, "package:$packageName".toUri()),
             )
         }
         // Lets the watchdog restart a killed alarm within seconds instead of Android's ~30 s.
         step("Exact alarms", Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             getSystemService(AlarmManager::class.java).canScheduleExactAlarms()) {
             startActivity(
-                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")),
+                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, "package:$packageName".toUri()),
             )
         }
         step("Battery optimisation off", pm.isIgnoringBatteryOptimizations(packageName)) {
             startActivity(
-                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")),
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, "package:$packageName".toUri()),
             )
         }
     }

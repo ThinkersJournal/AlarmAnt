@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.22
+- A3: Android lint run on main (25 warnings -> 9, 0 errors); fixes and dispositions in android/README "Lint". KTX prefs/Uri helpers, backup rules, API 26 lock-screen flags, InlinedApi suppressions with reasons.
+
 ## 0.0.21
 - A3: AlarmManager watchdog. While an alarm is unacknowledged, a 5 s exact alarm restarts the service if its process died (silent gap about 30 s -> 2 to 7 s). New permission SCHEDULE_EXACT_ALARM, new Setup step.
 
