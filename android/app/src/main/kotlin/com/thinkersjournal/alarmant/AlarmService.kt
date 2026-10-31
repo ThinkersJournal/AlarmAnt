@@ -29,6 +29,7 @@ class AlarmService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 ActiveAlarm.clear(this)
+                AlarmWatchdog.cancel(this)
                 stopAlarm()
                 stopSelf()
                 return START_NOT_STICKY
@@ -54,6 +55,11 @@ class AlarmService : Service() {
         ActiveAlarm.set(this, alert)
         ensureChannel(this)
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(this, alert), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        AlarmWatchdog.schedule(this)
+        // Already sounding this alert (a watchdog start racing the system's own restart): do not
+        // restart the audio.
+        if (playingId == alert.id && player != null) return
+        playingId = alert.id
 
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = getSystemService(PowerManager::class.java)
@@ -99,6 +105,7 @@ class AlarmService : Service() {
     }
 
     private fun stopAlarm() {
+        playingId = null
         player?.release()
         player = null
         savedVolume?.let {
@@ -116,6 +123,10 @@ class AlarmService : Service() {
     }
 
     companion object {
+        /** Id of the alert this process is sounding; null in a process where the service is not running. */
+        @Volatile
+        var playingId: String? = null
+
         fun startIntent(c: Context, alert: ActiveAlarm.Alert): Intent =
             Intent(c, AlarmService::class.java)
                 .setAction(ACTION_START)

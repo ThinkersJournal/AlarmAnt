@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.21
+- A3: AlarmManager watchdog. While an alarm is unacknowledged, a 5 s exact alarm restarts the service if its process died (silent gap about 30 s -> 2 to 7 s). New permission SCHEDULE_EXACT_ALARM, new Setup step.
+
 ## 0.0.20
 - A3: AlarmActivity follows Do Not Disturb live (Total Silence warning appears or clears while the alarm sounds). Emulator rows: fresh-install kill, Recents swipe measured. Docs and activity only.
 
