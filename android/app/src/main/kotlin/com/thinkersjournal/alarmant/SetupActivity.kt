@@ -1,6 +1,7 @@
 package com.thinkersjournal.alarmant
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -53,6 +54,13 @@ class SetupActivity : ComponentActivity() {
             nm.canUseFullScreenIntent()) {
             startActivity(
                 Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName")),
+            )
+        }
+        // Lets the watchdog restart a killed alarm within seconds instead of Android's ~30 s.
+        step("Exact alarms", Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            getSystemService(AlarmManager::class.java).canScheduleExactAlarms()) {
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")),
             )
         }
         step("Battery optimisation off", pm.isIgnoringBatteryOptimizations(packageName)) {
