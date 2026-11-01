@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.28
+- A6: `selftest` module: daily self-test through the real raise path (`SelfTest::tick`); previous test reported once as Passed, NotAcked (deadline) or Lost (sender has no record); a failed raise is returned and retried next tick. `raise_authorised` split out of `raise_alert`. 7 unit tests. No scheduler, persistence of `SelfTest` or failure notifier yet.
+
 ## 0.0.27
 - A9: `raise` module: `POST /alert` handler (`raise_alert`): bearer API key, JSON `{title, body}` (title 1 to 100 chars, body up to 1000), stores the alert then pushes it, answers 202 `{alert_id}`; 400/401/409/410/502/503 mapped. `AlertStore::remove`, `getrandom` dependency for 128-bit alert ids. 9 unit tests with a fake transport. No HTTP server yet. Test fix: AlarmPathTest's last assertion ran after Acknowledge had destroyed the activity (NullPointerException from `onActivity`, failed CI once); it now waits for the DESTROYED state.
 

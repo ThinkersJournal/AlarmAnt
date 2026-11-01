@@ -9,6 +9,7 @@
 pub mod ack;
 pub mod fcm;
 pub mod raise;
+pub mod selftest;
 
 use std::fmt;
 
