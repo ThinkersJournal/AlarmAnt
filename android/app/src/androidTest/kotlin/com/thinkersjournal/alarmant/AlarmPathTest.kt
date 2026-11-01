@@ -6,6 +6,7 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioManager
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -127,7 +128,9 @@ class AlarmPathTest {
             }
             assertTrue("Acknowledge did not stop the alarm", waitFor { alarmPlayers() == 0 })
             assertNull(ActiveAlarm.get(context))
-            scenario.onActivity { assertTrue(it.isFinishing) }
+            // Finishing destroys the activity, so onActivity can no longer run (a race that failed CI
+            // once, 2026-10-31): the destroyed state is the proof that Acknowledge finished it.
+            assertTrue("Acknowledge did not finish the activity", waitFor { scenario.state == Lifecycle.State.DESTROYED })
         }
     }
 }

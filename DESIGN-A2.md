@@ -37,3 +37,13 @@ A file on the VPS outside any repo, mode 0600. Its path is a ConfigurAnt key (`f
 ## Resolved / open questions
 - Ack auth (A4, built in `src/ack.rs`): the phone sends `Authorization: Bearer <ack token>`; the sender compares it in constant time with the token stored on the alert record. Answers: 200 first ack and repeats, 401 bad or missing token, 404 unknown alert (401/404 are final, the phone should stop retrying; `AckWorker` still retries every non-2xx, a follow-up). Still open: how the token is issued at device registration (random 32 bytes, stored beside the FCM token), and its storage in PersistAnt.
 - A 404 versus 401 tells a caller whether an alert id exists. Accepted: ids are random and only ever sent to the device.
+
+## Raise-an-alert call (A9, built in `src/raise.rs`)
+```
+POST /alert
+Authorization: Bearer <api key>
+{"title": "DB down", "body": "prod-1 unreachable"}
+
+202 {"alert_id": "<32 hex>"}
+```
+Title 1 to 100 characters, body 0 to 1000. Errors: 400 bad body, 401 bad key, 409 no phone registered, 410 phone token gone (re-register), 502 push refused, 503 push service busy (retry). Success means Google's push service accepted the message, not that the phone rang; the phone's acknowledgement is `POST /ack/{alert_id}` (A4). The API key is a ConfigurAnt secret (env only), compared in constant time. One device per recipient, so the registry returns one `Device`; registration (how the phone's FCM token and ack token reach the sender) is still open.

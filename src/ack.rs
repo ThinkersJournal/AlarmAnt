@@ -76,6 +76,8 @@ impl AlertRecord {
 pub trait AlertStore {
     fn insert(&self, record: AlertRecord);
     fn get(&self, alert_id: &str) -> Option<AlertRecord>;
+    /// Forgets an alert whose push was never accepted.
+    fn remove(&self, alert_id: &str);
     /// Moves the alert to `Acked` at `at` if it is not already. Must be atomic, so two racing
     /// calls report `Some(true)` once. `None`: no such alert. `Some(false)`: already acked.
     fn mark_acked(&self, alert_id: &str, at: u64) -> Option<bool>;
@@ -88,6 +90,10 @@ pub struct MemoryStore {
 }
 
 impl MemoryStore {
+    pub fn is_empty(&self) -> bool {
+        self.lock().is_empty()
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, AlertRecord>> {
         self.records.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -100,6 +106,10 @@ impl AlertStore for MemoryStore {
 
     fn get(&self, alert_id: &str) -> Option<AlertRecord> {
         self.lock().get(alert_id).cloned()
+    }
+
+    fn remove(&self, alert_id: &str) {
+        self.lock().remove(alert_id);
     }
 
     fn mark_acked(&self, alert_id: &str, at: u64) -> Option<bool> {
