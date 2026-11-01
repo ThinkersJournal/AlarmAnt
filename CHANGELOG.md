@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.0.29
-- A1: third patent pass: Google Patents route with positive control, 3 queries, 6 patents' independent claims read (all clear), constraints 11 and 12, 13 numbers listed unread. Docs only; the sweep stays incomplete.
+- A1: third patent pass: Google Patents route with positive control, 3 queries, independent claims of 26 documents read verbatim with patent-claims.py (outside as read), constraints 11 and 12, Masimo continuation question raised. Docs only; the sweep stays incomplete.
 
 ## 0.0.28
 - A6: `selftest` module: daily self-test through the real raise path (`SelfTest::tick`); previous test reported once as Passed, NotAcked (deadline) or Lost (sender has no record); a failed raise is returned and retried next tick. `raise_authorised` split out of `raise_alert`. 7 unit tests. No scheduler, persistence of `SelfTest` or failure notifier yet.
