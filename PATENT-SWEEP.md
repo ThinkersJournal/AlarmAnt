@@ -118,11 +118,36 @@ Result: the claims of every granted hit named in this file have now been read on
 Constraint 9 (from US2024/0277934): A5's second notification goes to a person (push, SMS, voice), never to a medical device such as an insulin pump or glucose sensor.
 Constraint 10 (from CA 2838076): no primary/secondary arrangement across one recipient's devices, with a delay timer on the secondary and an acknowledgment that silences the other device.
 
+## Third pass (2026-10-31, Google Patents route with a positive control)
+Route: `WebSearch` with `allowed_domains: [patents.google.com]`, so every result is a Google Patents page. Positive control: three queries (Q12 to Q14 below) returned patents this file already holds (US9798596B2, US9886840B2, US8713118B2, US9479387B2), so the route reaches the patent pages and the queries ask about our ideas. Claims read from the Google Patents page through a summarising model (WebFetch; a long page needs a second call with an offset to reach its claims), NOT verbatim and NOT the USPTO record; a verdict below that depends on exact claim wording must be re-read on the USPTO page images before it is relied on. `tools/patent-claims.py` is not in any releaseant checkout this lane can see.
+
+| Q | idea | query (patents.google.com only) |
+|---|---|---|
+| Q12 | 2 | `patent unacknowledged alert escalate to next contact by SMS or voice call after timeout mobile push` |
+| Q13 | 3 | `patent scheduled test alert verifies notification delivery path, missing acknowledgement indicates failure` |
+| Q14 | 1, 4 | `patent push notification alarm repeats until acknowledged overrides silent do not disturb mobile application` |
+
+| # | patent | assignee, status (Google) | independent claims read | overlap | our difference | verdict |
+|---|---|---|---|---|---|---|
+| 23 | US8477914B1 | Cox Communications; active est. 2031-09-11 | 1, 15, 19 | no reply from a targeted device, then repeated escalated communications, SMS/voice to affiliates (19) | every independent claim also requires automatically modifying a functionality of the targeted device when no reply arrives; AlarmAnt never changes the recipient's device | clear; constraint 11 |
+| 24 | US8648706B2 | Honeywell; active est. 2032-08-05 | 1, 11 | escalation of unacknowledged alarms | claim 1 needs urgency levels with threshold types, claim 11 an unacknowledged / acknowledged / pending state life cycle; A5 has one flat chain and no post-ack states | clear; constraint 12 |
+| 25 | US8364221B2 | Covidien; "expired - fee related" but est. 2028-08-06 (confirm) | 1, 9, 15, 21 | unacknowledged alarm escalates its sound | every independent claim is a pulse oximeter with several built-in speakers | clear |
+| 26 | US20050249023A1 | Philips; abandoned 2008 | 1, 8 | a remote sender overrides a user's do-not-disturb mode | abandoned, no term; AlarmAnt's override is an app-level permission, not a sender command | clear |
+| 27 | US9641669B2 | Apple; active est. 2032-12-14 | 1, 13, 17 | do-not-disturb | every independent claim exits do-not-disturb on detected device motion | clear |
+| 28 | US8762190B1 | PagerDuty; active est. 2033-03-15 | 17, 24 read on the USPTO page images (1 and 9 not viewed) | on-call schedules | schedule layers, epochs, virtual start time; AlarmAnt has no schedules | clear |
+
+Read from Google, summarised, lower confidence: US7552057B2 (individual, expired 2023-08-11) clear: needs process-exception monitoring and a channel independent of the process's infrastructure. US20030172077A1 (MIR3, abandoned) clear: rule processor, listeners, dispatcher, device connectors.
+
+NOT read (numbers surfaced by Q12 to Q14, claims unread): US20130332721A1 (Apple quiet hours, granted as US9348607B2, active est. 2033-03-15; its DND exceptions touch idea 4), US8204523B1 (Verizon, active est. 2030-12-22; delivery acknowledgement), US6237034B1, EP2393047A1, US8823507B1, US9288164B2 and US20140365569A1, US20140171146A1, US10904379B2, US8340702B2, US20040054743A1, US9830578 (PagerDuty schedule family; PDF fetched), US5748884A (expired 2016), US20150106121A1 (Masimo, medical).
+
+Constraint 11 (from US8477914B1): a missing acknowledgement never changes the recipient's device (no lock, disable or mode change).
+Constraint 12 (from US8648706B2): A5 has no urgency levels or threshold types, and no alert state after acknowledged (extends constraint 6).
+
 ## Needs review (to the PM)
 None yet at `needs-review`. Open items that stop a "complete" mark:
 - CA 2838076, US2024/0277934 and US20160086473 are read (Google Patents text only, 2026-10-30; see "Applications read"). Not confirmed on the USPTO/CIPO record; CA 2838076 claims are summarised, not read verbatim.
 - #3, #4, #5, #11: Google marks them expired for fees while also estimating later terms; confirm on the official record if any design-around is to be relaxed.
-- USPTO full-text scan (idea 2 and idea 3 especially), Espacenet and WIPO not run.
+- USPTO full-text scan, Espacenet and WIPO not run. Third pass (above) ran 3 Google Patents queries with a positive control and read 5 new patents' independent claims (one on the USPTO record); 13 further numbers are unread. The sweep is still not complete, and nothing here clears A5.
 - Domain-restricted route found 2026-10-31: web search with `allowed_domains: [patents.google.com]` reaches Google Patents pages. Positive control: the query `patents.google.com PagerDuty patent incident notification acknowledgement escalation` returned US9798596B2, already read in this file (#, batch 3), plus new numbers. Read from it, same day: US8762190B1 (PagerDuty, active est. 2033-03-15): USPTO page images, independents 17 and 24 read in full (claims 1 and 9 not viewed; claim 9's tail seen): schedule layers, epochs, virtual start time, final schedule preview; clear, AlarmAnt has no schedules (same family as #18). US7552057B2 (individual, expired per Google 2023-08-11): Google page via a summarising model, NOT verbatim: independents 1 and 8 need process-exception monitoring, a messaging controller choosing recipient and context, and an alternative channel independent of the process's own infrastructure; clear. US20030172077A1 (MIR3, abandoned): independents 1 and 3 via a summarising model, NOT verbatim: rule processor, listeners, dispatcher with stored escalation sequence, device connectors; clear (abandoned). US5748884A (MCI/Verizon, expired 2016-06-13, filed 1996) and US20150106121A1 (Masimo, medical alarm, granted as US10832818B2): claims NOT read. US9830578 (PagerDuty schedule family): PDF fetched, claims NOT read. `tools/patent-claims.py` named by the PM is not in any releaseant checkout this lane can see (not on origin/main or the worktrees), so claims came from the USPTO page images and Google summaries above.
 - Assignee searches: 3 web queries run 2026-10-31 (Opsgenie/Atlassian escalation; Splunk On-Call/VictorOps escalation; PagerDuty self-test/synthetic notification). NO CLEARANCE, NO SEARCH ROUTE REACHED: all three returned product docs and forum posts and no patent page, so the null proves nothing: the same search tool reached Google Patents for Q1 to Q4 and Q6 but not here (no positive control for assignee queries). Pushover, Apple and Google not run. These need a patent-database route (USPTO assignee field, Espacenet) the lane's tools do not reach; the PM decides whether to accept the sweep as it stands.
 
@@ -137,6 +162,8 @@ None yet at `needs-review`. Open items that stop a "complete" mark:
 8. A2/A3: alerts are data pushes; no alert is triggered by detecting text in a message body (US9686398B2).
 9. A5: the second notification goes to a person, never to a medical device (US2024/0277934).
 10. A3/A5: one device per recipient; no primary/secondary delay-timer arrangement between a recipient's devices (CA 2838076).
+11. A5: a missing acknowledgement never changes the recipient's device (US8477914B1).  
+12. A5: no urgency levels, threshold types or post-acknowledged states (US8648706B2).
 
 ## Limitations
 AI-assisted search with a US-only general web search tool; patent text is machine-converted from Google Patents; statuses are Google's, not the official record; only independent claims were read in full (dependent claims read where quoted above); non-US patents and non-English patents were not searched; the search can miss a patent that uses different vocabulary ("page", "incident", "responder"). Not legal advice and not a freedom-to-operate opinion.
