@@ -115,6 +115,8 @@ Result: the claims of every granted hit named in this file have now been read on
 | US2024/0277934A1 | Medtronic Minimed; pending, so claims may still change | 1, 13, 20 (20 claims; all 20 read). Each needs a first notification unacknowledged at a mobile device within a time frame, then a second notification delivered to a MEDICAL DEVICE. Claim 1 read verbatim; 13 and 20 from a model summary of the page | clear while the second notification never goes to a medical device. New constraint 9 |
 | CA 2838076 (CA2838076C granted 2021-03-09) | BlackBerry; Active, est. to 2033-12-18 | 1, 8, 16 (16 claims). Claim 1: on a notification from a server, a primary device alerts and sends an acknowledgment so the other device stops alerting; a non-primary device starts a delay timer before alerting. Claim 16: acknowledgment sent over a second lower-latency connection. Summarised by a model from Google Patents, NOT read verbatim | clear for the current design (one device per recipient, no primary/secondary). New constraint 10; read the claims verbatim on CIPO before any multi-device feature |
 
+Re-read verbatim 2026-10-31 with patent-claims.py (Google's claim text, not the CIPO/USPTO record): CA2838076C claims 1 and 8 as summarised above (primary-device test, acknowledgment message that interrupts the other device's alert, delay timer on the non-primary device; claim 16 not an independent in the script output); US20240277934A1 claims 1, 13 and 20 (a failure to acknowledge a first notification at a mobile device, then a second notification delivered to a MEDICAL device; claim 20 also requires a medical application); US20160086473A1 claim 1 (external data source, analytical system, alert queue, notification system with acknowledgment receipt; script lists the assignee as an individual and status expired). The earlier model summaries of CA2838076 and of claims 13 and 20 of US2024/0277934 are superseded; both remain outside as read.
+
 Constraint 9 (from US2024/0277934): A5's second notification goes to a person (push, SMS, voice), never to a medical device such as an insulin pump or glucose sensor.
 Constraint 10 (from CA 2838076): no primary/secondary arrangement across one recipient's devices, with a delay timer on the secondary and an acknowledgment that silences the other device.
 
@@ -151,7 +153,7 @@ Constraint 12 (from US8648706B2): A5 has no urgency levels or threshold types, a
 
 ## Needs review (to the PM)
 None yet at `needs-review`. Open items that stop a "complete" mark:
-- CA 2838076, US2024/0277934 and US20160086473 are read (Google Patents text only, 2026-10-30; see "Applications read"). Not confirmed on the USPTO/CIPO record; CA 2838076 claims are summarised, not read verbatim.
+- CA 2838076, US2024/0277934 and US20160086473 are read verbatim from Google Patents text (2026-10-31; see "Applications read"). Not confirmed on the USPTO/CIPO record.
 - #3, #4, #5, #11: Google marks them expired for fees while also estimating later terms; confirm on the official record if any design-around is to be relaxed.
 - USPTO full-text scan, Espacenet and WIPO not run. Third pass (above) ran 3 Google Patents queries with a positive control and read the independent claims of 26 documents verbatim with patent-claims.py; US5748884A is unread. The sweep is still not complete, and nothing here clears A5.
 - Domain-restricted Google Patents route (found 2026-10-31, positive control and verbatim reads): see "Third pass" below; the summariser-only notes first written here were replaced by verbatim reads there.
