@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "alarmant"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "getrandom",
  "serde_json",
