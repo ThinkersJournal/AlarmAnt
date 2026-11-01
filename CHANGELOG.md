@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.30
+- A2: `auth` module: Google service-account sign-in for the sender: `ServiceAccount::from_json`, RS256 JWT assertion (`ring`), token request body, token response parsing, `TokenCache` (refresh a minute early). Key and token never print; errors carry no secret. 10 unit tests, signature verified against the public key. New dependencies: `ring`, `base64`. No network yet: the HTTPAnt call is the next slice. Does not touch escalation.
+
 ## 0.0.29
 - A1: third patent pass: Google Patents route with positive control, 3 queries, independent claims of 26 documents read verbatim with patent-claims.py (outside as read), constraints 11 and 12, Masimo family of 7 read verbatim and mapped against A5 in PATENT-A5-READING.md for a person to confirm. Docs only; the sweep stays incomplete.
 

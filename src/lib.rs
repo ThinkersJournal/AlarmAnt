@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 
 pub mod ack;
+pub mod auth;
 pub mod fcm;
 pub mod raise;
 pub mod selftest;
