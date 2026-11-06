@@ -10,3 +10,6 @@ Then: A2 slice 2b (HTTPAnt `PushTransport`, check `deny.toml` licences), A6 sche
 
 Tools: `C:\Projects\tools\patent-claims.py <numbers>`; emulator AVD `alarm36` in `C:\Users\cires\lane-tools\alarmant`.
 Rules: Sonnet only, questions to the PM, bump the version per PR (next 0.0.34), `Cargo.lock` must match (CI --locked). Primary checkout stays on `main`; branches in worktrees `C:\Projects\AlarmAnt-wt-<topic>`.
+
+WAIT: AlarmAnt#33 merged by the PM sweep | check: gh pr view 33 --repo ThinkersJournal/AlarmAnt --json state -q .state | wake: 2026-11-06T23:10:00Z
+WAIT: board 389 ruled by CireSnave (SMS/voice provider; 0 hits means it left the open list, then read the ruling) | check: grep -c '^### 389\.' /c/Projects/CIRESNAVE-DECISIONS.md | wake: 2026-11-07T04:00:00Z
