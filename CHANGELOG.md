@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.35
+- Docs only: HANDOFF brought current (A5 slices 1, 2, 5 and restart tests on main; only the board 389 wait remains).
+
 ## 0.0.34
 - A5: six restart tests for `Escalator`: resuming sends nothing, every overdue alert fires exactly one step after a long outage, stage and due are saved after each step, restart after the call ends unresolved without a second call, a stored acked record is dropped on load, a not-yet-due timer waits. Tests only; mutation check: giving an unresolved alert a new timer fails the stage/due test.
 
