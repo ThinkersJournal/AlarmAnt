@@ -8,6 +8,7 @@
 
 pub mod ack;
 pub mod auth;
+pub mod escalate;
 pub mod fcm;
 pub mod raise;
 pub mod selftest;
