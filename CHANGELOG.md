@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.32
+- A5: escalation state survives a restart: `EscalationStore` trait (write-through), `EscalationRecord`, `MemoryEscalationStore`, `Escalator::with_store` resumes open alerts; a timer that came due while down fires one step on the next tick. `Alert::restore` and accessors, `Stage` now public. Person 2's number still never prints. 3 new tests. No PersistAnt backend, provider or phone input yet.
+
 ## 0.0.31
 - A5: `escalate` module: `Escalator` runs the escalation state machine on one fixed timer (N minutes, default 5, 0 raised to 1): `register`, `ack`, `tick(now, channel)`, `next_due`. A late tick fires one step only; an ack cancels the timer; unresolved alerts have no timer and end only on ack. No received/viewed/decline input, no provider, no persistence yet. 7 unit tests with a fake channel.
 

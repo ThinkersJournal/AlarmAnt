@@ -107,8 +107,9 @@ pub struct Outcome {
     pub send_errors: Vec<ChannelError>,
 }
 
+/// How far down the flat chain an alert has gone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Stage {
+pub enum Stage {
     First,
     Sms,
     Voice,
@@ -132,6 +133,33 @@ impl Alert {
             state: AlertState::Sent,
             stage: Stage::First,
         }
+    }
+
+    /// Rebuild an alert from stored parts (after a restart).
+    pub fn restore(
+        id: impl Into<String>,
+        person2: Contact,
+        state: AlertState,
+        stage: Stage,
+    ) -> Self {
+        Alert {
+            id: id.into(),
+            person2,
+            state,
+            stage,
+        }
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn person2(&self) -> &Contact {
+        &self.person2
+    }
+
+    pub fn stage(&self) -> Stage {
+        self.stage
     }
 
     pub fn state(&self) -> AlertState {
