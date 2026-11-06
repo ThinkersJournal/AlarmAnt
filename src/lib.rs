@@ -12,6 +12,7 @@ pub mod escalate;
 pub mod fcm;
 pub mod raise;
 pub mod selftest;
+pub mod wire;
 
 use std::fmt;
 
