@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.34
+- A5: six restart tests for `Escalator`: resuming sends nothing, every overdue alert fires exactly one step after a long outage, stage and due are saved after each step, restart after the call ends unresolved without a second call, a stored acked record is dropped on load, a not-yet-due timer waits. Tests only; mutation check: giving an unresolved alert a new timer fails the stage/due test.
+
 ## 0.0.33
 - A5: `wire` module: `EscalationConfig` (N 1 to 120 minutes, person 2 as + and 8 to 15 digits; errors never carry the number), `raise_escalating` (raise, then start the timer) and `acknowledge_escalating` (ack, then cancel it). An ack that races the raise response starts no timer: register and cancel both run under the escalator lock after the store is read. 6 tests. Still no provider, no ConfigurAnt/PersistAnt backend, no new phone input.
 
