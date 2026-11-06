@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.31
+- A5: `escalate` module: `Escalator` runs the escalation state machine on one fixed timer (N minutes, default 5, 0 raised to 1): `register`, `ack`, `tick(now, channel)`, `next_due`. A late tick fires one step only; an ack cancels the timer; unresolved alerts have no timer and end only on ack. No received/viewed/decline input, no provider, no persistence yet. 7 unit tests with a fake channel.
+
 ## 0.0.30
 - A2: `auth` module: Google service-account sign-in for the sender: `ServiceAccount::from_json`, RS256 JWT assertion (`ring`), token request body, token response parsing, `TokenCache` (refresh a minute early). Key and token never print; errors carry no secret. 10 unit tests, signature verified against the public key. New dependencies: `ring`, `base64`. No network yet: the HTTPAnt call is the next slice. Does not touch escalation.
 
