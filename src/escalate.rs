@@ -332,6 +332,107 @@ mod tests {
         assert!(!format!("{saved:?}").contains("5550100"));
     }
 
+    fn store_with(records: Vec<EscalationRecord>) -> std::sync::Arc<MemoryEscalationStore> {
+        let s = std::sync::Arc::new(MemoryEscalationStore::default());
+        for r in records {
+            s.save(r);
+        }
+        s
+    }
+
+    fn rec(id: &str, state: AlertState, stage: Stage, due: Option<u64>) -> EscalationRecord {
+        EscalationRecord {
+            alert_id: id.into(),
+            person2: contact(),
+            state,
+            stage,
+            due,
+        }
+    }
+
+    #[test]
+    fn resuming_sends_nothing_by_itself() {
+        let s = store_with(vec![rec("a", AlertState::Sent, Stage::First, Some(1))]);
+        let ch = Fake::default();
+        let _e = Escalator::with_store(5, Box::new(s));
+        assert!(ch.0.borrow().is_empty());
+    }
+
+    #[test]
+    fn every_overdue_alert_fires_exactly_one_step_after_a_long_outage() {
+        let s = store_with(vec![
+            rec("a", AlertState::Sent, Stage::First, Some(10)),
+            rec("b", AlertState::Escalated, Stage::Sms, Some(20)),
+            rec("c", AlertState::Escalated, Stage::Voice, Some(30)),
+        ]);
+        let (mut e, ch) = (
+            Escalator::with_store(5, Box::new(s.clone())),
+            Fake::default(),
+        );
+        let fired = e.tick(1_000_000, &ch);
+        assert_eq!(fired.len(), 3);
+        assert_eq!(*ch.0.borrow(), vec!["sms a", "voice b"]);
+        assert_eq!(e.state("a"), Some(AlertState::Escalated));
+        assert_eq!(e.state("b"), Some(AlertState::Escalated));
+        assert_eq!(e.state("c"), Some(AlertState::Unresolved));
+        // Same tick again: nothing further, each timer restarted at now + N.
+        assert!(e.tick(1_000_000, &ch).is_empty());
+        assert_eq!(e.next_due(), Some(1_000_300));
+    }
+
+    #[test]
+    fn stage_and_due_are_saved_after_each_step() {
+        let s = store_with(vec![]);
+        let (mut e, ch) = (
+            Escalator::with_store(5, Box::new(s.clone())),
+            Fake::default(),
+        );
+        e.register("a", contact(), 0);
+        let saved = |s: &MemoryEscalationStore| s.load_all().remove(0);
+        assert_eq!((saved(&s).stage, saved(&s).due), (Stage::First, Some(300)));
+        e.tick(300, &ch);
+        assert_eq!((saved(&s).stage, saved(&s).due), (Stage::Sms, Some(600)));
+        e.tick(600, &ch);
+        assert_eq!((saved(&s).stage, saved(&s).due), (Stage::Voice, Some(900)));
+        e.tick(900, &ch);
+        let r = saved(&s);
+        assert_eq!((r.state, r.due), (AlertState::Unresolved, None));
+    }
+
+    #[test]
+    fn restart_after_the_call_ends_unresolved_without_a_second_call() {
+        let s = store_with(vec![rec(
+            "a",
+            AlertState::Escalated,
+            Stage::Voice,
+            Some(900),
+        )]);
+        let (mut e, ch) = (Escalator::with_store(5, Box::new(s)), Fake::default());
+        let fired = e.tick(900, &ch);
+        assert_eq!(fired[0].1.audit, vec![AuditEvent::Unresolved]);
+        assert!(ch.0.borrow().is_empty(), "no second call, no new text");
+    }
+
+    #[test]
+    fn a_stored_acked_record_is_dropped_on_load() {
+        let s = store_with(vec![rec("a", AlertState::Acked, Stage::Sms, None)]);
+        let (mut e, ch) = (
+            Escalator::with_store(5, Box::new(s.clone())),
+            Fake::default(),
+        );
+        assert_eq!(e.state("a"), None);
+        assert!(s.load_all().is_empty());
+        assert!(e.tick(99_999, &ch).is_empty());
+    }
+
+    #[test]
+    fn not_yet_due_after_restart_waits_for_its_own_time() {
+        let s = store_with(vec![rec("a", AlertState::Sent, Stage::First, Some(500))]);
+        let (mut e, ch) = (Escalator::with_store(5, Box::new(s)), Fake::default());
+        assert!(e.tick(499, &ch).is_empty());
+        assert_eq!(e.tick(500, &ch).len(), 1);
+    }
+
     #[test]
     fn zero_minutes_is_raised_to_one() {
         let (mut e, ch) = (Escalator::new(0), Fake::default());
