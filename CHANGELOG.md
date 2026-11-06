@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.33
+- A5: `wire` module: `EscalationConfig` (N 1 to 120 minutes, person 2 as + and 8 to 15 digits; errors never carry the number), `raise_escalating` (raise, then start the timer) and `acknowledge_escalating` (ack, then cancel it). An ack that races the raise response starts no timer: register and cancel both run under the escalator lock after the store is read. 6 tests. Still no provider, no ConfigurAnt/PersistAnt backend, no new phone input.
+
 ## 0.0.32
 - A5: escalation state survives a restart: `EscalationStore` trait (write-through), `EscalationRecord`, `MemoryEscalationStore`, `Escalator::with_store` resumes open alerts; a timer that came due while down fires one step on the next tick. `Alert::restore` and accessors, `Stage` now public. Person 2's number still never prints. 3 new tests. No PersistAnt backend, provider or phone input yet.
 
