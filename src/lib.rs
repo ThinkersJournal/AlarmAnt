@@ -10,6 +10,7 @@ pub mod ack;
 pub mod auth;
 pub mod escalate;
 pub mod fcm;
+pub mod push;
 pub mod raise;
 pub mod selftest;
 pub mod wire;

@@ -82,6 +82,14 @@ impl ServiceAccount {
         })
     }
 
+    /// Tests only: aim sign-in at a local fake server. Production accounts keep the `https://`
+    /// check in [`ServiceAccount::from_json`].
+    #[cfg(test)]
+    pub(crate) fn with_token_uri(mut self, uri: impl Into<String>) -> Self {
+        self.token_uri = uri.into();
+        self
+    }
+
     pub fn project_id(&self) -> &str {
         &self.project_id
     }
@@ -211,7 +219,7 @@ impl TokenCache {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     // A throwaway RSA key made for these tests on 2026-11-01. It protects nothing and appears
@@ -226,16 +234,21 @@ mod tests {
         )
     }
 
-    fn account_json() -> String {
+    /// A throwaway account file whose token endpoint is `token_uri` (for fake servers).
+    pub(crate) fn account_json_for(token_uri: &str) -> String {
         json!({
             "type": "service_account",
             "project_id": "alarmant-test",
             "private_key_id": "abc",
             "private_key": test_pem(),
             "client_email": "sender@alarmant-test.iam.gserviceaccount.com",
-            "token_uri": "https://oauth2.googleapis.com/token",
+            "token_uri": token_uri,
         })
         .to_string()
+    }
+
+    fn account_json() -> String {
+        account_json_for("https://oauth2.googleapis.com/token")
     }
 
     fn account() -> ServiceAccount {

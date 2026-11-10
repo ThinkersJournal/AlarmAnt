@@ -70,9 +70,20 @@ pub fn request_body(token: &DeviceToken, alert: &AlertMessage) -> Value {
     })
 }
 
+/// Where Google's push service lives.
+pub const FCM_BASE: &str = "https://fcm.googleapis.com";
+
 /// The send URL for a Firebase project.
 pub fn send_url(project_id: &str) -> String {
-    format!("https://fcm.googleapis.com/v1/projects/{project_id}/messages:send")
+    send_url_at(FCM_BASE, project_id)
+}
+
+/// The send URL on another base (a local fake server in tests).
+pub fn send_url_at(base: &str, project_id: &str) -> String {
+    format!(
+        "{}/v1/projects/{project_id}/messages:send",
+        base.trim_end_matches('/')
+    )
 }
 
 /// Why a push failed. The sender decides what to do with it; the transport only classifies.
