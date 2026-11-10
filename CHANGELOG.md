@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.36
+- Docs only: DESIGN-A5 answers CireSnave's question on alerting person 2 through the app: no reason was recorded for SMS and a call; independence argument, app-first tier order, patent-reading cost (US 19/662,313 still unread), and what board 389 becomes.
+
 ## 0.0.35
 - Docs only: HANDOFF brought current (A5 slices 1, 2, 5 and restart tests on main; only the board 389 wait remains).
 
