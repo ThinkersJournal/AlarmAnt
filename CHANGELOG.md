@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.37
+- A6: rest of the provider-free part: `SelfTest::to_json`/`from_json` and `SelfTestStore` (+ in-memory), `SelfTest::next_wake` (when to tick next: now if due or ended, else the sooner of the next daily slot and the pending deadline), `run_step` (load, tick, save, notify, next wake; a failed raise retries after `retry_secs`; unreadable state starts afresh), and the `FailureNotifier` trait with `notify_failures`. The failure channel is NOT chosen (tied to A5; asked the PM). No timer loop (no runtime dependency yet). 8 new tests; mutation check: naming the new test instead of the ended one fails the verdict-plus-raise test.
+
 ## 0.0.35
 - Docs only: HANDOFF brought current (A5 slices 1, 2, 5 and restart tests on main; only the board 389 wait remains).
 
