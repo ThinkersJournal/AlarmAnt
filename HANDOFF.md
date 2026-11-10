@@ -12,3 +12,5 @@ Tools: `C:\Projects\tools\patent-claims.py <numbers>`; emulator AVD `alarm36` in
 Rules: Sonnet only, questions to the PM, bump the version per PR (next 0.0.36), `Cargo.lock` must match (CI --locked). Primary checkout stays on `main`; branches in worktrees `C:\Projects\AlarmAnt-wt-<topic>`.
 
 WAIT: board 389 ruled by CireSnave (SMS/voice provider; 0 hits means it left the open list, then read the ruling) | check: grep -c '^### 389\.' /c/Projects/CIRESNAVE-DECISIONS.md | wake: 2026-11-07T04:00:00Z
+
+OPEN PM TASKS (2026-11-10): (1) read US 19/662,313 (continuation of 19/020,852, filed 2026-04-29, pending): USPTO ODP API needs a key (401), PPUBS session endpoint guessed wrong (404), Google search finds no 2026 publication, Justia 403; say plainly if unpublished, map to A5 as in PATENT-A5-READING.md; (2) A6 remainder with no provider (scheduler loop, persisted SelfTest; failure notifier choice is tied to A5, ask the PM); (3) A2 2b prep against the auth-framework rc shape; (4) DESIGN-A5 "Question 2026-11-10" (person 2 via the app) awaits CireSnave's ruling on board 389.
