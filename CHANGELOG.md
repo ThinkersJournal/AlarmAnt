@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.41
+- A6: `run_loop` and `Schedule`: the scheduler loop around `run_step`. Runtime-agnostic (caller gives the clock, the sleep and the stop flag); sleeps the time to the step's wake, clamped to 1 s..`MAX_SLEEP_SECS` (3600), so it never busy-loops and a far wake or a clock jump is reached in hops. No provider and no notifier channel chosen (PM 2026-11-11: trait and fake only; board 131/389 stay open). 3 tests on a simulated clock; mutation checks: dropping the sleep cap and changing the retry delay each fail a test.
+
 ## 0.0.40
 - Docs only: HANDOFF brought current (A2 2b and the setter hardening are on main; only the board 389 wait remains).
 
