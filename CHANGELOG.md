@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.0.44
+- A4: the HTTP route. New `routes` module: `ack_route` adds `POST /ack/:alert_id` to an HTTPAnt `Server` (200 first and repeat ack, 401 bad or missing token, 404 unknown alert; empty body), `Clock`, `system_clock`. 3 tests over real HTTP on 127.0.0.1; mutation check: dropping the Authorization header fails the first-ack test. `AlertStore` and `DeviceRegistry` now require `Send + Sync` (a handler future holds them across an await); all in-tree implementors already were. New dependency `httpant-server` 0.7.5; `httpant-client` raised to 0.7.5 to match.
 ## 0.0.43
 - Docs only: HANDOFF current after #42.
 

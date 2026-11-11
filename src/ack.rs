@@ -73,7 +73,7 @@ impl AlertRecord {
 }
 
 /// Durable per-alert state. A PersistAnt-backed implementation comes with the service.
-pub trait AlertStore {
+pub trait AlertStore: Send + Sync {
     fn insert(&self, record: AlertRecord);
     fn get(&self, alert_id: &str) -> Option<AlertRecord>;
     /// Forgets an alert whose push was never accepted.
