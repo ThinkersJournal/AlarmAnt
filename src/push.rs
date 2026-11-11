@@ -30,6 +30,14 @@ const MAX_BODY: usize = 64 * 1024;
 type Clock = Arc<dyn Fn() -> u64 + Send + Sync>;
 
 /// FCM HTTP v1 over HTTPAnt.
+///
+/// The FCM base URL cannot be changed outside test builds:
+///
+/// ```compile_fail
+/// fn f(t: alarmant::push::HttpPushTransport) {
+/// let _ = t.with_fcm_base("http://example.invalid");
+/// }
+/// ```
 pub struct HttpPushTransport {
     client: Client,
     account: ServiceAccount,
@@ -75,8 +83,10 @@ impl HttpPushTransport {
         }
     }
 
-    /// Point the FCM call at another base URL (a local fake server).
-    pub fn with_fcm_base(mut self, base: impl Into<String>) -> Self {
+    /// Point the FCM call at another base URL (a local fake server). Test builds only, like
+    /// `ServiceAccount::with_token_uri`: the shipped transport can only talk to the real endpoint.
+    #[cfg(test)]
+    pub(crate) fn with_fcm_base(mut self, base: impl Into<String>) -> Self {
         self.fcm_base = base.into();
         self
     }
