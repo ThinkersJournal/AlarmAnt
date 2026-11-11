@@ -11,7 +11,7 @@ A6 `run_loop` + `Schedule` is DONE (0.0.41, runtime-agnostic, trait and fake onl
 Tools: `C:\Projects\tools\patent-claims.py <numbers>`; emulator AVD `alarm36` in `C:\Users\cires\lane-tools\alarmant`.
 Rules: Sonnet only, questions to the PM, bump the version per PR (next 0.0.44), `Cargo.lock` must match (CI --locked). Primary checkout stays on `main`; branches in worktrees `C:\Projects\AlarmAnt-wt-<topic>`.
 
-WAIT: #44 merged; then rebase a9-http-route onto main, retarget #45 to main, push, [READY] again | check: gh pr view 44 --repo ThinkersJournal/AlarmAnt --json state --jq .state | wake: 2026-11-11T22:00:00Z
+WAIT: #45 merged; then merge main into a7-sideload-notes (keep 0.0.46), push, [READY] | check: gh pr view 45 --repo ThinkersJournal/AlarmAnt --json state --jq .state | wake: 2026-11-11T23:30:00Z
 WAIT: board 389 ruled by CireSnave (SMS/voice provider; 0 hits means it left the open list, then read the ruling) | check: grep -c '^### 389\.' /c/Projects/CIRESNAVE-DECISIONS.md | wake: 2026-11-12T00:00:00Z
 
 OPEN PM TASKS (2026-11-11): (1) read US 19/662,313 (continuation of 19/020,852, filed 2026-04-29, pending): USPTO ODP API needs a key (401), PPUBS session endpoint guessed wrong (404), Google finds no 2026 publication, Justia 403; say plainly if unpublished, map to A5 as in PATENT-A5-READING.md; (2) A6 remainder (scheduler loop; ask PM on notifier); (3) DESIGN-A5 "Question 2026-11-10" (person 2 via the app) awaits CireSnave's ruling on board 389.
