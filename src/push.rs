@@ -531,8 +531,11 @@ mod tests {
             ))
         );
         let text = format!("{} {t:?}", all_text(&r));
-        for secret in [DEVICE, "ya29.SECRET-ACCESS", "PRIVATE KEY", "MIIEv"] {
-            assert!(!text.contains(secret), "{secret} leaked");
+        for (i, secret) in [DEVICE, "ya29.SECRET-ACCESS", "PRIVATE KEY", "MIIEv"]
+            .iter()
+            .enumerate()
+        {
+            assert!(!text.contains(secret), "fixture {i} leaked");
         }
     }
 
