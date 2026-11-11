@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.46
+- A7: `android/SIDELOAD.md`: build the debug APK, install with `adb install -r` or from the Files app, the first-run grants, updating, and what is not yet possible (registration, real pushes, release signing, physical-device testing). Docs only; nothing executed on a phone.
+
 ## 0.0.43
 - Docs only: HANDOFF current after #42.
 
