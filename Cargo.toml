@@ -1,6 +1,6 @@
 [package]
 name = "alarmant"
-version = "0.0.37"
+version = "0.0.38"
 edition = "2024"
 description = "An emergency alert that cannot be ignored: escalation state machine (A5). Android app and senders not yet built."
 license = "MIT OR Apache-2.0"
@@ -11,5 +11,9 @@ exclude = ["android/"]
 [dependencies]
 base64 = "0.23.1"
 getrandom = "0.4.3"
+httpant-client = { version = "0.7.1", features = ["https"] }
 ring = "0.17.14"
 serde_json = "1"
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["rt", "macros"] }

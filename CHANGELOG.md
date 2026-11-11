@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.38
+- A2 slice 2b: `push` module: `HttpPushTransport`, the real `PushTransport` over HTTPAnt (`httpant-client` 0.7.1 with `https`): service-account sign-in cached by `TokenCache`, FCM HTTP v1 POST with the bearer token, answer classified (2xx accepted; 404 `UNREGISTERED` is `TokenGone`; 429, 5xx and network failures transient; a 401 clears the token and retries once; the rest permanent). Errors are fixed text or a short provider code, never a token, the key, the device token or a body. Endpoints are configurable; 13 tests run against a local fake server, no real FCM call (key is board 354). New dependencies: `httpant-client`; dev: `tokio`. `cargo deny` licences, bans, sources and advisories pass with the existing deny.toml. Mutation checks: no cache clear on 401, UNREGISTERED not mapped, token never cached each fail a test. Auth-framework rc shape not used: 2b runs on `TokenCache` as is.
+
 ## 0.0.37
 - A6: rest of the provider-free part: `SelfTest::to_json`/`from_json` and `SelfTestStore` (+ in-memory), `SelfTest::next_wake` (when to tick next: now if due or ended, else the sooner of the next daily slot and the pending deadline), `run_step` (load, tick, save, notify, next wake; a failed raise retries after `retry_secs`; unreadable state starts afresh), and the `FailureNotifier` trait with `notify_failures`. The failure channel is NOT chosen (tied to A5; asked the PM). No timer loop (no runtime dependency yet). 8 new tests; mutation check: naming the new test instead of the ended one fails the verdict-plus-raise test.
 
