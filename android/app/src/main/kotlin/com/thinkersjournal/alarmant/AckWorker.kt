@@ -8,7 +8,8 @@ import java.net.URL
 
 /**
  * Calls POST {ack_base_url}/ack/{alert_id} with the device token (A4, DESIGN-A2 flow step 4).
- * WorkManager supplies the retry; a non-2xx answer or an I/O error asks for another attempt.
+ * WorkManager supplies the retry; a 5xx/other answer or an I/O error asks for another attempt.
+ * 401 (token rejected) and 404 (unknown alert) are permanent: retrying cannot change them, so stop.
  * The base URL and token come from "config" preferences; registration is not designed yet.
  */
 class AckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -25,12 +26,26 @@ class AckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
                 conn.setRequestProperty("Authorization", "Bearer $token")
                 conn.connectTimeout = 10_000
                 conn.readTimeout = 10_000
-                if (conn.responseCode in 200..299) Result.success() else Result.retry()
+                when (outcome(conn.responseCode)) {
+                    Outcome.DONE -> Result.success()
+                    Outcome.STOP -> Result.failure()
+                    Outcome.RETRY -> Result.retry()
+                }
             } finally {
                 conn.disconnect()
             }
         } catch (_: java.io.IOException) {
             Result.retry()
+        }
+    }
+
+    enum class Outcome { DONE, STOP, RETRY }
+
+    companion object {
+        fun outcome(code: Int): Outcome = when (code) {
+            in 200..299 -> Outcome.DONE
+            401, 404 -> Outcome.STOP
+            else -> Outcome.RETRY
         }
     }
 }
