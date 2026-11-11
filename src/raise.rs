@@ -25,7 +25,7 @@ pub struct Device {
 }
 
 /// Where the registered device comes from. A PersistAnt-backed registry replaces fixed config later.
-pub trait DeviceRegistry {
+pub trait DeviceRegistry: Send + Sync {
     fn device(&self) -> Option<Device>;
 }
 
