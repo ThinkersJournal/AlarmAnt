@@ -380,6 +380,26 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn the_api_key_never_appears_in_any_answer() {
+        let auth = format!("Bearer {KEY}");
+        let wrong = format!("Bearer {}", "f".repeat(MIN_API_KEY_CHARS));
+        let srv = serve_raise(Arc::default(), dev(), Arc::default()).await;
+        let mut texts = vec![];
+        texts.push(raise(&srv, Some(&auth), "not json").await.1); // 400, right key
+        texts.push(raise(&srv, Some(&auth), vec![0xff]).await.1); // 400, right key
+        texts.push(raise(&srv, Some(&wrong), OK_BODY).await.1); // 401
+        texts.push(raise(&srv, None, OK_BODY).await.1); // 401
+        texts.push(raise(&srv, Some(&auth), OK_BODY).await.1); // 202
+        for t in &texts {
+            assert!(
+                !t.contains(KEY) && !t.contains(&"f".repeat(MIN_API_KEY_CHARS)),
+                "{t}"
+            );
+        }
+        srv.shutdown().await.unwrap();
+    }
+
     #[test]
     fn api_key_rules() {
         assert_eq!(api_key_from_value(None).unwrap_err(), KeyError::NotSet);
