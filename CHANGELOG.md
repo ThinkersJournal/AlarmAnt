@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.40
+- Docs only: HANDOFF brought current (A2 2b and the setter hardening are on main; only the board 389 wait remains).
+
 ## 0.0.39
 - Harden FCM base URL setter: `HttpPushTransport::with_fcm_base` is now test-only (`#[cfg(test)]`, `pub(crate)`), like `ServiceAccount::with_token_uri`, so the shipped transport can only use the built-in endpoint. A `compile_fail` doctest fails if it becomes public again.
 
