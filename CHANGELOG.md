@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.0.47
-- Docs only: `DESIGN-REGISTRATION.md`, the device-registration proposal (A9 gap): enrolment code, `/register`, FCM token rotation, revocation that also invalidates in-flight acks, what is stored in PersistAnt, what is never logged, the failure when registration is missing, and six open questions for the PM. No code; a fresh patent reading and the PM OK are owed first.
+- Docs only: `DESIGN-REGISTRATION.md`, the device-registration proposal (A9 gap): enrolment code, `/register`, FCM token rotation, revocation that also invalidates in-flight acks, what is stored in PersistAnt, what is never logged, the failure when registration is missing, and six open questions for the PM. Rulings recorded (PM 2026-11-11) and `PATENT-REGISTRATION-READING.md` added (a model reading, not legal advice). No code yet.
 
 ## 0.0.45
 - A9: the HTTP route and key config (key compared in constant time via `AckToken::matches`, never logged; a test that no answer contains it). `routes::raise_route` adds `POST /alert` (Bearer API key, JSON `{"title","body"}`; 202 `{"alert_id"}`, 400, 401, 409, 410, 413 body over 16 KiB, 502, 503; JSON answers) from a `RaiseConfig`. `api_key_from_env` / `api_key_from_value`: the key comes from an environment variable only, at least 32 characters, whitespace trimmed; errors name the rule, never the value. 3 new tests over real HTTP; mutation check: ignoring the request's Authorization header fails the 401 test. Device registration is still open (fixed config registry until PersistAnt).

@@ -1,6 +1,6 @@
 # Device registration: design proposal (A9 gap)
 
-Status: PROPOSAL, docs only (PM task 2026-11-11). **No code before a fresh patent reading and the PM's OK**; the auth and token choices below are open questions for the PM (section 8), not decisions. No secret appears in this file or may appear in an example of it.
+Status: DECIDED by the PM on 2026-11-11 (section 8 records the rulings); docs only so far. The fresh patent reading is `PATENT-REGISTRATION-READING.md`. Code goes in slices, each with a known-bad test first (expired code, reused code, a revoked device's ack refused). No secret appears in this file or may appear in an example of it.
 
 ## 1. The gap
 
@@ -52,13 +52,15 @@ The FCM token, the ack token, the enrollment code, the API key, the service-acco
 
 ## 7. Patent note
 
-Registration is plumbing: no alert priority, ordering, escalation or delivery report is added, which keeps to the PATENT-SWEEP design constraints (one priority, flat escalation, no phone-side "received"). **A fresh reading for this specific change has not been done**; it is owed, with the PM's OK, before any code. The sweep stays incomplete: "outside as read", never "clear".
+Registration is plumbing: no alert priority, ordering, escalation or delivery report is added, which keeps to the PATENT-SWEEP design constraints (one priority, flat escalation, no phone-side "received"). A fresh reading for this change is in `PATENT-REGISTRATION-READING.md` (thin: three searches, three patents read; it adds five constraints, including that `/register` returns no push-service certificate). The sweep stays incomplete: "outside as read", never "clear".
 
-## 8. Open questions for the PM (auth and token choices)
+## 8. Rulings (PM, 2026-11-11)
 
-1. **Enrolment mechanism:** operator-created one-time code (proposed) versus a pre-shared secret written into the app's config (simpler, never expires, weaker).
-2. **Ack token at rest:** digest only (proposed) versus the token itself (today).
-3. **FCM token at rest:** plain in PersistAnt with file permissions (proposed) versus encrypted with a SecretAnt key (not shipped).
-4. **Revocation invalidates in-flight acks** (proposed yes): confirms that a revoked phone can no longer stop an escalation.
-5. **Rate limit** on `/register` (5 a minute, global) acceptable?
-6. **Operator CLI** (`alarmant enroll` / `revoke`) versus admin HTTP routes (proposed CLI: no new network surface for the most sensitive action).
+1. Enrolment: operator-created code, single use, 10-minute expiry, 128 random bits, constant-time compare, never logged.
+2. Ack token stored as a digest only.
+3. FCM token in clear in PersistAnt with file permissions for now; revisit when SecretAnt ships; never logged.
+4. Revocation kills in-flight acks: yes.
+5. `/register` rate limit 5 a minute, **counted on failed attempts only**, so a flood of bad codes cannot lock out a real enrolment; a valid code always passes (the limiter must not run before the code check in a way that rejects a valid code).
+6. Operator CLI `enroll` / `revoke`; no admin HTTP routes.
+
+Slices (each starts with its known-bad test): (a) `AckToken` stores a digest; (b) enrolment store and code check (expired, reused, wrong); (c) `POST /register` with the failed-attempt limiter; (d) `PUT /device/token`; (e) revoke, including invalidating in-flight acks; (f) CLI; (g) PersistAnt backends; (h) Android registration step.
