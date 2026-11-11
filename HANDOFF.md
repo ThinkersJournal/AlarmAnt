@@ -1,6 +1,6 @@
 # HANDOFF: AlarmAnt
 
-STATE (2026-11-11): FULL SPEED. Main (0.0.42) has A2 `fcm`+`auth`+`push` (HttpPushTransport over HTTPAnt; base-URL setter test-only), A4 `ack`, A9 `raise`, A6 `selftest` (persisted state, next wake, run_step, notifier trait), A5 state machine + `escalate` + persistence store + `wire`, and the Android app. A5 slices needing no provider are done; slice 3 waits on board 389.
+STATE (2026-11-11): FULL SPEED. Main (0.0.45) also has the A4 and A9 HTTP routes (`routes`, env-only API key); #46 (A7 sideload notes, 0.0.46) awaits the gate; device registration (how the phone's tokens reach the sender) is open and needs a PM design call. Earlier: A2 `fcm`+`auth`+`push` (HttpPushTransport over HTTPAnt; base-URL setter test-only), A4 `ack`, A9 `raise`, A6 `selftest` (persisted state, next wake, run_step, notifier trait), A5 state machine + `escalate` + persistence store + `wire`, and the Android app. A5 slices needing no provider are done; slice 3 waits on board 389.
 
 RULES (PM, verbatim intent): phone never reports "received"/"viewed", only Acknowledge; no Decline control; escalation on a fixed timer only. Any change needs a fresh patent reading and the PM's OK. Keep PATENT-A5-READING.md current, labelled a model reading, not legal advice. The PM tries the USPTO continuity lookup for the Masimo family before any public release. Sweep stays incomplete: say "outside as read", never "clear".
 Secrets: real `android/app/google-services.json` git-ignored; FCM tokens never logged; service-account key is board 354 (CireSnave, VPS only).
