@@ -6,10 +6,10 @@ RULES (PM, verbatim intent): phone never reports "received"/"viewed", only Ackno
 Secrets: real `android/app/google-services.json` git-ignored; FCM tokens never logged; service-account key is board 354 (CireSnave, VPS only).
 
 NEXT A5: slice 3 `AlertChannel` adapter behind the trait: provider pick is CireSnave's, ask the PM first, wire none until told. Slice 4 ConfigurAnt/PersistAnt backends for `EscalationConfig` and `EscalationStore` (need the Ants) plus a scheduler loop calling `Escalator::tick`.
-Then: A6 scheduler loop (needs a runtime dep; failure-notifier choice tied to A5, ask the PM first), Kotlin `AckWorker` stop on 401/404. A2 2b is DONE (#38, #39). No open PRs.
+A6 `run_loop` + `Schedule` is DONE (0.0.41, runtime-agnostic, trait and fake only; the service must supply a tokio sleep and a real FailureNotifier, channel is board 131/389, CireSnave's). Then: Kotlin `AckWorker` stop on 401/404. A2 2b is DONE (#38, #39). No open PRs.
 
 Tools: `C:\Projects\tools\patent-claims.py <numbers>`; emulator AVD `alarm36` in `C:\Users\cires\lane-tools\alarmant`.
-Rules: Sonnet only, questions to the PM, bump the version per PR (next 0.0.41), `Cargo.lock` must match (CI --locked). Primary checkout stays on `main`; branches in worktrees `C:\Projects\AlarmAnt-wt-<topic>`.
+Rules: Sonnet only, questions to the PM, bump the version per PR (next 0.0.42), `Cargo.lock` must match (CI --locked). Primary checkout stays on `main`; branches in worktrees `C:\Projects\AlarmAnt-wt-<topic>`.
 
 WAIT: board 389 ruled by CireSnave (SMS/voice provider; 0 hits means it left the open list, then read the ruling) | check: grep -c '^### 389\.' /c/Projects/CIRESNAVE-DECISIONS.md | wake: 2026-11-12T00:00:00Z
 

@@ -258,6 +258,62 @@ pub async fn run_step(
     (tick, wake)
 }
 
+/// Longest single sleep in [`run_loop`]. A wake time far away is reached in hops, so a clock
+/// that jumps or a sleep that ends early costs one extra step, never a missed test.
+pub const MAX_SLEEP_SECS: u64 = 3600;
+
+/// When the daily test runs and how long it waits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Schedule {
+    /// Seconds after 00:00 UTC of the daily slot.
+    pub at_secs: u64,
+    /// Seconds a test may wait for its acknowledge before it counts as missed.
+    pub deadline_secs: u64,
+    /// Seconds to wait before retrying a failed raise.
+    pub retry_secs: u64,
+}
+
+/// Runs [`run_step`] until `stop` says so, sleeping between steps for `sleep(secs)`: the time to
+/// the step's wake, at least one second (never a busy loop) and at most [`MAX_SLEEP_SECS`].
+/// Returns the number of steps run. Runtime-agnostic: the caller supplies the clock (unix
+/// seconds), the sleep (a tokio sleep, in the service) and the stop flag, which is checked
+/// before every step and again before every sleep.
+#[allow(clippy::too_many_arguments)]
+pub async fn run_loop<Fut: Future<Output = ()>>(
+    state: &dyn SelfTestStore,
+    notifier: &dyn FailureNotifier,
+    devices: &dyn DeviceRegistry,
+    transport: &impl PushTransport,
+    store: &dyn AlertStore,
+    schedule: &Schedule,
+    clock: &dyn Fn() -> u64,
+    sleep: impl Fn(u64) -> Fut,
+    stop: &dyn Fn() -> bool,
+) -> u64 {
+    let mut steps = 0;
+    while !stop() {
+        let now = clock();
+        let (_, wake) = run_step(
+            state,
+            notifier,
+            devices,
+            transport,
+            store,
+            now,
+            schedule.at_secs,
+            schedule.deadline_secs,
+            schedule.retry_secs,
+        )
+        .await;
+        steps += 1;
+        if stop() {
+            break;
+        }
+        sleep(wake.saturating_sub(now).clamp(1, MAX_SLEEP_SECS)).await;
+    }
+    steps
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -606,5 +662,81 @@ mod tests {
         tick(&mut st, &t, &s, DAY0 + AT);
         tick(&mut st, &t, &s, DAY0 + 3 * DAY + AT + 5);
         assert_eq!(t.sent.lock().unwrap().len(), 2);
+    }
+
+    const SCHED: Schedule = Schedule {
+        at_secs: AT,
+        deadline_secs: DEADLINE,
+        retry_secs: 120,
+    };
+
+    /// Runs the loop on a simulated clock that `sleep` advances; stops after `n` sleeps.
+    fn run_for(
+        n: usize,
+        start: u64,
+        ss: &MemorySelfTestStore,
+        note: &Note,
+        t: &Fake,
+        s: &MemoryStore,
+    ) -> (u64, Vec<u64>) {
+        let clock = std::cell::Cell::new(start);
+        let sleeps = std::cell::RefCell::new(Vec::new());
+        let steps = block_on(run_loop(
+            ss,
+            note,
+            &One,
+            t,
+            s,
+            &SCHED,
+            &|| clock.get(),
+            |secs| {
+                sleeps.borrow_mut().push(secs);
+                clock.set(clock.get() + secs);
+                async {}
+            },
+            &|| sleeps.borrow().len() >= n,
+        ));
+        (steps, sleeps.into_inner())
+    }
+
+    fn fresh() -> (MemorySelfTestStore, Note, Fake, MemoryStore) {
+        (
+            MemorySelfTestStore::default(),
+            Note::default(),
+            Fake::default(),
+            MemoryStore::default(),
+        )
+    }
+
+    #[test]
+    fn loop_raises_once_notifies_a_miss_once_and_sleeps_in_capped_hops() {
+        let (ss, n, t, s) = fresh();
+        let (steps, sleeps) = run_for(3, DAY0 + AT, &ss, &n, &t, &s);
+        assert_eq!(steps, 3);
+        assert_eq!(sleeps, vec![3600, 3600, 3600]);
+        assert_eq!(t.sent.lock().unwrap().len(), 1);
+        assert_eq!(n.0.lock().unwrap().len(), 1, "one missed ack, one notice");
+    }
+
+    #[test]
+    fn loop_retries_a_failed_raise_after_the_retry_delay() {
+        let (ss, n, t, s) = fresh();
+        *t.fail.lock().unwrap() = true;
+        let (_, sleeps) = run_for(2, DAY0 + AT, &ss, &n, &t, &s);
+        assert_eq!(sleeps, vec![120, 120]);
+        assert_eq!(
+            n.0.lock().unwrap().len(),
+            2,
+            "each failed raise is reported"
+        );
+    }
+
+    #[test]
+    fn loop_stopped_up_front_runs_nothing() {
+        let (ss, n, t, s) = fresh();
+        let (steps, sleeps) = run_for(0, DAY0 + AT, &ss, &n, &t, &s);
+        assert_eq!((steps, sleeps.len()), (0, 0));
+        assert!(t.sent.lock().unwrap().is_empty());
+        assert!(ss.load().is_none());
     }
 }
