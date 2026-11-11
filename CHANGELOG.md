@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.48
+- Registration slice (a): `AckToken` keeps only a SHA-256 digest of the token (`ring`), never the token. `matches` hashes the presented value and compares the digests in constant time; new `digest_hex` (what to persist) and `from_digest_hex`. Known-bad test first: `a_leaked_digest_cannot_ack` failed against the plaintext implementation, passes now; a second test covers the round trip and malformed digests. The A9 API key uses the same type, so it is digest-only too. Debug/Display still redact. Behaviour for callers is unchanged. PM-approved 2026-11-11; version number is a placeholder.
+
 ## 0.0.45
 - A9: the HTTP route and key config (key compared in constant time via `AckToken::matches`, never logged; a test that no answer contains it). `routes::raise_route` adds `POST /alert` (Bearer API key, JSON `{"title","body"}`; 202 `{"alert_id"}`, 400, 401, 409, 410, 413 body over 16 KiB, 502, 503; JSON answers) from a `RaiseConfig`. `api_key_from_env` / `api_key_from_value`: the key comes from an environment variable only, at least 32 characters, whitespace trimmed; errors name the rule, never the value. 3 new tests over real HTTP; mutation check: ignoring the request's Authorization header fails the 401 test. Device registration is still open (fixed config registry until PersistAnt).
 ## 0.0.44

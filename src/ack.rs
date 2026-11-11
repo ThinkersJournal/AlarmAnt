@@ -13,22 +13,51 @@ use std::sync::Mutex;
 
 use crate::AlertState;
 
-/// The secret a phone presents to acknowledge an alert sent to it. `Debug` and `Display` never
-/// show it.
+/// The secret a phone presents to acknowledge an alert sent to it. Only a SHA-256 digest is kept
+/// (the token is 256 random bits, so a plain digest is enough), so a stored or leaked record cannot
+/// be replayed as the token. `Debug` and `Display` never show it.
 #[derive(Clone, PartialEq, Eq)]
-pub struct AckToken(String);
+pub struct AckToken([u8; 32]);
+
+fn sha256(text: &str) -> [u8; 32] {
+    let d = ring::digest::digest(&ring::digest::SHA256, text.as_bytes());
+    let mut out = [0u8; 32];
+    out.copy_from_slice(d.as_ref());
+    out
+}
 
 impl AckToken {
-    pub fn new(token: impl Into<String>) -> Self {
-        AckToken(token.into())
+    /// Keeps the digest of `token`, not the token.
+    pub fn new(token: impl AsRef<str>) -> Self {
+        AckToken(sha256(token.as_ref()))
     }
 
-    /// Compares in time that does not depend on where the first difference is.
+    /// Rebuilds a token from a persisted [`digest_hex`](Self::digest_hex); `None` unless it is 64
+    /// hex digits.
+    pub fn from_digest_hex(hex: &str) -> Option<Self> {
+        if hex.len() != 64 || !hex.is_ascii() {
+            return None;
+        }
+        let mut out = [0u8; 32];
+        for (i, byte) in out.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).ok()?;
+        }
+        Some(AckToken(out))
+    }
+
+    /// What to persist instead of the token: 64 lowercase hex digits. It cannot be presented as
+    /// the token.
+    pub fn digest_hex(&self) -> String {
+        self.0.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    /// Hashes `presented` and compares the digests in time that does not depend on where the
+    /// first difference is.
     pub fn matches(&self, presented: &str) -> bool {
-        let (a, b) = (self.0.as_bytes(), presented.as_bytes());
-        let mut diff = a.len() ^ b.len();
-        for i in 0..a.len().max(b.len()) {
-            diff |= usize::from(a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0));
+        let other = sha256(presented);
+        let mut diff = 0u8;
+        for (a, b) in self.0.iter().zip(other.iter()) {
+            diff |= a ^ b;
         }
         diff == 0
     }
@@ -293,6 +322,40 @@ mod tests {
         let t = AckToken::new("s3cret");
         let r = AlertRecord::sent("a", 1, t.clone());
         assert!(!format!("{t:?} {t} {r:?}").contains("s3cret"));
+    }
+
+    #[test]
+    fn a_leaked_digest_cannot_ack() {
+        let t = AckToken::new("s3cret");
+        let leaked = t.digest_hex();
+        assert_ne!(leaked, "s3cret");
+        assert!(!t.matches(&leaked));
+        let s = MemoryStore::default();
+        s.insert(AlertRecord::sent("a", 1, t));
+        let auth = format!("Bearer {leaked}");
+        assert_eq!(
+            acknowledge(&s, "a", Some(&auth), 5),
+            AckOutcome::Unauthorized
+        );
+        assert_eq!(s.get("a").unwrap().state, AlertState::Sent);
+    }
+
+    #[test]
+    fn the_digest_round_trips_and_still_matches_the_token() {
+        let t = AckToken::new("s3cret");
+        let hex = t.digest_hex();
+        assert_eq!(hex.len(), 64);
+        assert!(
+            hex.bytes()
+                .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+        );
+        let back = AckToken::from_digest_hex(&hex).unwrap();
+        assert!(back.matches("s3cret"));
+        assert!(!back.matches(&hex));
+        assert!(AckToken::from_digest_hex("zz").is_none());
+        assert!(AckToken::from_digest_hex(&"g".repeat(64)).is_none());
+        assert!(AckToken::from_digest_hex(&"é".repeat(32)).is_none());
+        assert!(!format!("{t:?}").contains(&hex));
     }
 
     #[test]
