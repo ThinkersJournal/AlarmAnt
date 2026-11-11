@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.43
+- Docs only: HANDOFF current after #42.
+
 ## 0.0.42
 - Android: `AckWorker` stops (Result.failure) on 401 and 404 instead of retrying forever; 5xx, other codes and I/O errors still retry. Classifier `AckWorker.outcome` unit-tested.
 
