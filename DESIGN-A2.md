@@ -38,7 +38,7 @@ A file on the VPS outside any repo, mode 0600. Its path is a ConfigurAnt key (`f
 - Ack auth (A4, built in `src/ack.rs`, route in `src/routes.rs`): the phone sends `Authorization: Bearer <ack token>`; the sender compares it in constant time with the token stored on the alert record. Answers: 200 first ack and repeats, 401 bad or missing token, 404 unknown alert (401/404 are final, the phone should stop retrying; `AckWorker` still retries every non-2xx, a follow-up). Still open: how the token is issued at device registration (random 32 bytes, stored beside the FCM token), and its storage in PersistAnt.
 - A 404 versus 401 tells a caller whether an alert id exists. Accepted: ids are random and only ever sent to the device.
 
-## Raise-an-alert call (A9, built in `src/raise.rs`)
+## Raise-an-alert call (A9, built in `src/raise.rs`; route and key loading in `src/routes.rs`)
 ```
 POST /alert
 Authorization: Bearer <api key>
@@ -46,7 +46,7 @@ Authorization: Bearer <api key>
 
 202 {"alert_id": "<32 hex>"}
 ```
-Title 1 to 100 characters, body 0 to 1000. Errors: 400 bad body, 401 bad key, 409 no phone registered, 410 phone token gone (re-register), 502 push refused, 503 push service busy (retry). Success means Google's push service accepted the message, not that the phone rang; the phone's acknowledgement is `POST /ack/{alert_id}` (A4). The API key is a ConfigurAnt secret (env only), compared in constant time. One device per recipient, so the registry returns one `Device`; registration (how the phone's FCM token and ack token reach the sender) is still open.
+Title 1 to 100 characters, body 0 to 1000. Errors: 400 bad body, 401 bad key, 409 no phone registered, 410 phone token gone (re-register), 502 push refused, 503 push service busy (retry). Success means Google's push service accepted the message, not that the phone rang; the phone's acknowledgement is `POST /ack/{alert_id}` (A4). The API key is a secret read from an environment variable only (`api_key_from_env`, at least 32 characters; 413 for a body over 16 KiB), compared in constant time. One device per recipient, so the registry returns one `Device`; registration (how the phone's FCM token and ack token reach the sender) is still open.
 
 ## Daily self-test (A6, built in `src/selftest.rs`)
 Once a day at a configured UTC time the service raises a real alert (title `AlarmAnt self-test`) through the A9 path, so FCM, the phone's alarm and the person are all exercised. The person acknowledges it as any alert. A later `tick` after the deadline (default one hour, configurable) returns `NotAcked` if it is still unacknowledged, `Lost` if the store no longer has it, `Passed` if acknowledged; each verdict is returned once. A failed raise is returned too and retried every tick. The failure notifier must not be the phone (it may be the broken part): an email or SMS to the operator, chosen with the escalation channel (A5, blocked on A1). `SelfTest` is two values plus a flag; persist it with the alert store so a restart does not raise a second test or lose a pending verdict. A self-test never escalates to person 2. A fresh `SelfTest` raises on its first tick even if today's time has passed.
