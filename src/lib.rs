@@ -13,6 +13,7 @@ pub mod escalate;
 pub mod fcm;
 pub mod push;
 pub mod raise;
+pub mod register;
 pub mod routes;
 pub mod selftest;
 pub mod wire;
