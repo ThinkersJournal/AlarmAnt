@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.48
+- Registration slice (a): `AckToken` keeps only a SHA-256 digest of the token (`ring`), never the token. `matches` hashes the presented value and compares the digests in constant time; new `digest_hex` (what to persist) and `from_digest_hex`. Known-bad test first: `a_leaked_digest_cannot_ack` failed against the plaintext implementation, passes now; a second test covers the round trip and malformed digests. The A9 API key uses the same type, so it is digest-only too. Debug/Display still redact. Behaviour for callers is unchanged. PM-approved 2026-11-11; version number is a placeholder.
+
 ## 0.0.47
 - Docs only: `DESIGN-REGISTRATION.md`, the device-registration proposal (A9 gap): enrolment code, `/register`, FCM token rotation, revocation that also invalidates in-flight acks, what is stored in PersistAnt, what is never logged, the failure when registration is missing, and six open questions for the PM. Rulings recorded (PM 2026-11-11) and `PATENT-REGISTRATION-READING.md` added (a model reading, not legal advice). No code yet.
 
