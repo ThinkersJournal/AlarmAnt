@@ -33,6 +33,10 @@ pub const MAX_FCM_TOKEN_CHARS: usize = 4096;
 pub trait DeviceStore: DeviceRegistry {
     /// Makes `d` the device, replacing any earlier one.
     fn set(&self, d: Device);
+    /// Replaces the push token if `presented_ack` is the registered device's ack token; the ack
+    /// token itself is kept. False (and nothing changed) when no device is registered or the
+    /// token does not match. One step, so a concurrent re-registration cannot be overwritten.
+    fn replace_push_token(&self, presented_ack: &str, token: DeviceToken) -> bool;
 }
 
 /// In-memory [`DeviceStore`].
@@ -53,6 +57,17 @@ impl DeviceRegistry for MemoryDevices {
 impl DeviceStore for MemoryDevices {
     fn set(&self, d: Device) {
         *self.device.lock().unwrap_or_else(|p| p.into_inner()) = Some(d);
+    }
+
+    fn replace_push_token(&self, presented_ack: &str, token: DeviceToken) -> bool {
+        let mut g = self.device.lock().unwrap_or_else(|p| p.into_inner());
+        match g.as_mut() {
+            Some(d) if d.ack_token.matches(presented_ack) => {
+                d.push_token = token;
+                true
+            }
+            _ => false,
+        }
     }
 }
 
@@ -151,6 +166,42 @@ pub fn register(
     Ok(token)
 }
 
+/// Handles `PUT /device/token` (FCM token rotation): `Authorization: Bearer <ack token>` and
+/// `{"fcm_token"}`. The ack token is the credential, so no operator step is needed; it is checked
+/// first, so a stranger learns nothing about the body, and the token is replaced in one step with
+/// the check. Only the push token changes: nothing here reports delivery or escalates anything.
+pub fn update_token(
+    devices: &dyn DeviceStore,
+    authorization: Option<&str>,
+    body: &str,
+) -> Result<(), RegisterError> {
+    let presented = authorization
+        .and_then(bearer_token)
+        .ok_or(RegisterError::Unauthorized)?;
+    // Parsed here but applied only if the credential matches; an unauthenticated caller gets the
+    // 401 either way, so the body is never judged for a stranger.
+    let parsed = parse_fcm_token(body);
+    match parsed {
+        Ok(fcm) => {
+            if devices.replace_push_token(presented, DeviceToken::new(fcm)) {
+                Ok(())
+            } else {
+                Err(RegisterError::Unauthorized)
+            }
+        }
+        Err(bad) => {
+            if devices
+                .device()
+                .is_some_and(|d| d.ack_token.matches(presented))
+            {
+                Err(bad)
+            } else {
+                Err(RegisterError::Unauthorized)
+            }
+        }
+    }
+}
+
 /// The status and JSON body to answer. Fixed text: nothing the client sent is repeated.
 pub fn response(result: &Result<String, RegisterError>) -> (u16, Value) {
     match result {
@@ -160,6 +211,14 @@ pub fn response(result: &Result<String, RegisterError>) -> (u16, Value) {
         Err(RegisterError::TooManyFailures) => {
             (429, json!({ "error": "too many failed attempts" }))
         }
+    }
+}
+
+/// The status and JSON body for `PUT /device/token`: 200, or the same fixed failures as `/register`.
+pub fn token_response(result: &Result<(), RegisterError>) -> (u16, Value) {
+    match result {
+        Ok(()) => (200, json!({ "updated": true })),
+        Err(e) => response(&Err(*e)),
     }
 }
 
@@ -195,6 +254,78 @@ mod tests {
 
     fn bearer(c: &str) -> String {
         format!("Bearer {c}")
+    }
+
+    fn registered() -> (Rig, String) {
+        let r = rig();
+        let token = go(&r, Some(&bearer(&r.code)), BODY, 1001).unwrap();
+        (r, token)
+    }
+
+    fn put(r: &Rig, auth: Option<&str>, body: &str) -> Result<(), RegisterError> {
+        update_token(&r.dev, auth, body)
+    }
+
+    const NEW_BODY: &str = r#"{"fcm_token":"tok-rotated"}"#;
+
+    #[test]
+    fn the_ack_token_replaces_the_push_token_and_keeps_acking() {
+        let (r, token) = registered();
+        put(&r, Some(&bearer(&token)), NEW_BODY).unwrap();
+        let d = r.dev.device().unwrap();
+        assert_eq!(d.push_token.expose(), "tok-rotated");
+        assert!(d.ack_token.matches(&token), "the ack token is unchanged");
+        assert_eq!(token_response(&Ok(())).0, 200);
+    }
+
+    #[test]
+    fn a_missing_wrong_or_borrowed_credential_is_401_and_changes_nothing() {
+        let (r, token) = registered();
+        let digest = r.dev.device().unwrap().ack_token.digest_hex();
+        let code_like = bearer(&r.code);
+        let bearer_ok = bearer(&token);
+        for auth in [
+            None,
+            Some("Bearer nope"),
+            Some(token.as_str()),
+            Some(code_like.as_str()),
+            Some(&bearer(&digest)[..]),
+            Some("Basic x"),
+        ] {
+            let e = put(&r, auth, NEW_BODY).unwrap_err();
+            assert_eq!(e, RegisterError::Unauthorized, "{auth:?}");
+            assert_eq!(r.dev.device().unwrap().push_token.expose(), "tok-abc");
+        }
+        assert!(put(&r, Some(&bearer_ok), NEW_BODY).is_ok());
+    }
+
+    #[test]
+    fn with_no_device_registered_it_is_401() {
+        let r = rig();
+        let e = put(&r, Some("Bearer anything"), NEW_BODY).unwrap_err();
+        assert_eq!(e, RegisterError::Unauthorized);
+        assert!(r.dev.device().is_none());
+    }
+
+    #[test]
+    fn credentials_are_checked_before_the_body_and_a_bad_body_changes_nothing() {
+        let (r, token) = registered();
+        let e = put(&r, Some("Bearer nope"), "not json").unwrap_err();
+        assert_eq!(
+            e,
+            RegisterError::Unauthorized,
+            "no body detail for strangers"
+        );
+        for body in [
+            "not json",
+            "{}",
+            r#"{"fcm_token":""}"#,
+            r#"{"fcm_token":5}"#,
+        ] {
+            let e = put(&r, Some(&bearer(&token)), body).unwrap_err();
+            assert!(matches!(e, RegisterError::BadRequest(_)), "{body}");
+            assert_eq!(r.dev.device().unwrap().push_token.expose(), "tok-abc");
+        }
     }
 
     #[test]
