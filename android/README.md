@@ -8,6 +8,8 @@ Remaining gaps:
 - Device registration and the ack base URL/token (`config` preferences) wait on the A2 ack-auth decision.
 - Build limits: `gradle.properties` caps workers at 2; run one build at a time. `local.properties` (SDK path) is git-ignored.
 
+Installing on a phone without the Play Store: `SIDELOAD.md`.
+
 ## Build, lint, test
 
 Needs JDK 17 and an Android SDK (platform 37.0, build-tools 37.0.0). Set `JAVA_HOME` and `ANDROID_HOME`; do not create `local.properties` (lint flags its Windows path form and caches the result). Copy or create `app/google-services.json` (git-ignored; a placeholder builds, only the real file receives pushes).
