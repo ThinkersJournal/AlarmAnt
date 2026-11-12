@@ -22,7 +22,20 @@ No query found a patent that combines registration, push, acknowledgement and es
 
 ## Seen only as search snippets (claims not read)
 
-US 14/642147 (financial transactions, server registers a device and sends an opaque token), US10911908 (registration tokens for message handling), US11088807 (application-level acknowledgements), US9886574B2 and relatives (Assa Abloy, revoking a mobile credential), US20100262959 (Microsoft, revoking an app). Their relevance to revocation is by title only. **A gap: revocation that also invalidates pending acknowledgements is the least covered idea here**, and the only thing found near it is credential revocation in physical access control; its claims were not read.
+US 14/642147 (financial transactions, server registers a device and sends an opaque token), US10911908 (registration tokens for message handling), US11088807 (application-level acknowledgements). Revocation that also invalidates pending acknowledgements was the least covered idea; the credential-revocation claims found near it are now read (next section).
+
+## Revocation follow-up (2026-11-11; PM hold: read the credential-revocation claims)
+
+Independent claims read from Google Patents (not the official record): every independent of the first three; of the Microsoft application, claims 1 and 13 and the first 900 characters of 18.
+
+| Patent | Holder; status (Google) | Independents | What every independent needs | Verdict for "revoking a device also invalidates its pending acks" |
+|---|---|---|---|---|
+| US9886574B2 Mobile credential revocation | Assa Abloy; Active, est. 2032-09-14 | 1, 10, 18 | a **credential manager** validating associated credentials, a **primary credential** whose invalidity makes the associated one invalid, the **device invalidating** the associated credential after it is used, and the manager **automatically re-validating** it on a validating event | outside as read: no primary/associated hierarchy, the phone invalidates nothing, nothing is re-validated |
+| US10127377B2 | Assa Abloy; Active, est. 2032-09-14 | 1, 16 | a primary credential **cryptographically independent** of several associated credentials; the device invalidates one associated credential while the others and the primary stay valid | outside as read: one token, no primary, no per-credential scoping |
+| US9361452B2 | Assa Abloy; Active, est. 2032-09-14 | 1, 19, 37 | the device invalidates an associated credential without invalidating the primary, **then asks the manager to validate it again** | outside as read: no device-side invalidation, no re-validation request |
+| US20100262959A1 Revocation of application on mobile device | Microsoft; Expired (fee) | 1, 13, 18 | revoking an **application** on the phone by instruction or updated manifest, and asking another entity to **roll back a transaction** | outside as read (and expired): we revoke a server record, not an application, and roll back nothing |
+
+Reading: all four are about a credential or application being invalidated by or on the device and re-validated through a manager. Ours is a server-side deletion of one device record plus clearing the ack-token digest on alerts still in flight, with no re-validation path (a new phone enrols again with a new code). Two limits remain: the USPTO full-text scan, Espacenet and WIPO were not run, so a patent on "pending acknowledgements invalid after revocation" in an alerting system could exist unseen; and this is a model reading, not legal advice. Constraint added: **revocation must not grow a re-validation or "restore" step for the old device, and must not require the phone to invalidate itself.**
 
 ## Constraints these readings add to DESIGN-REGISTRATION.md
 
@@ -30,7 +43,8 @@ US 14/642147 (financial transactions, server registers a device and sends an opa
 2. No portal-login, transaction or "approve on your phone" flow.
 3. The phone never reports "received" or "viewed" (existing rule); registration and rotation record only that the phone called the sender.
 4. Revocation stays an operator CLI action; no alert-state-dependent device logic beyond "invalidate pending ack tokens".
-5. Re-read before: a second device, phone-originated alerts, any accept/reject control.
+5. Revocation never gets a re-validation or restore step for the old device and never needs the phone to invalidate itself (see the follow-up).
+6. Re-read before: a second device, phone-originated alerts, any accept/reject control.
 
 ## What the PM should know
 
