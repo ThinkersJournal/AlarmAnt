@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.49 — tooling: changelog fragments and version stamp
+
+- Adopt the portfolio changelog-fragment workflow: `changelog.d/` fragments, `tools/stamp-version.py` (run by the gate at merge), `tools/check-fragment.py` and the `changelog-fragment` CI check. PRs now add one fragment and never edit CHANGELOG.md, Cargo.toml or Cargo.lock versions.
+
 ## 0.0.48
 - Registration slice (a): `AckToken` keeps only a SHA-256 digest of the token (`ring`), never the token. `matches` hashes the presented value and compares the digests in constant time; new `digest_hex` (what to persist) and `from_digest_hex`. Known-bad test first: `a_leaked_digest_cannot_ack` failed against the plaintext implementation, passes now; a second test covers the round trip and malformed digests. The A9 API key uses the same type, so it is digest-only too. Debug/Display still redact. Behaviour for callers is unchanged. PM-approved 2026-11-11; version number is a placeholder.
 
