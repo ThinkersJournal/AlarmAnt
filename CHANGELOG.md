@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.51
+- Process: adopt the changelog-fragment kit (PM 2026-11-12): `tools/stamp-version.py`, `tools/check-fragment.py`, `.github/workflows/changelog-fragment.yml`, `changelog.d/README.md`. From the next PR on, a PR adds one `changelog.d/<topic>.md` fragment and never edits `CHANGELOG.md`, a `Cargo.toml` version or `Cargo.lock`; the PM stamps the version at merge. Dry run (`stamp-version.py 99.99.99 --dry-run` with a throwaway fragment) listed Cargo.toml, Cargo.lock and CHANGELOG.md; no `=X.Y.Z` pins in this repo, so no `tools/stamp-extra.txt`. This PR bumps its own version once, as allowed.
+
 ## 0.0.47
 - Docs only: `DESIGN-REGISTRATION.md`, the device-registration proposal (A9 gap): enrolment code, `/register`, FCM token rotation, revocation that also invalidates in-flight acks, what is stored in PersistAnt, what is never logged, the failure when registration is missing, and six open questions for the PM. Rulings recorded (PM 2026-11-11) and `PATENT-REGISTRATION-READING.md` added (a model reading, not legal advice). No code yet.
 
