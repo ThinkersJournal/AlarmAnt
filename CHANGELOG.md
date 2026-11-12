@@ -1,9 +1,14 @@
 # Changelog
 
+## 0.0.46
+- A7: `android/SIDELOAD.md`: build the debug APK, install with `adb install -r` or from the Files app, the first-run grants, updating, and what is not yet possible (registration, real pushes, release signing, physical-device testing). Docs only; nothing executed on a phone.
+
 ## 0.0.45
 - A9: the HTTP route and key config (key compared in constant time via `AckToken::matches`, never logged; a test that no answer contains it). `routes::raise_route` adds `POST /alert` (Bearer API key, JSON `{"title","body"}`; 202 `{"alert_id"}`, 400, 401, 409, 410, 413 body over 16 KiB, 502, 503; JSON answers) from a `RaiseConfig`. `api_key_from_env` / `api_key_from_value`: the key comes from an environment variable only, at least 32 characters, whitespace trimmed; errors name the rule, never the value. 3 new tests over real HTTP; mutation check: ignoring the request's Authorization header fails the 401 test. Device registration is still open (fixed config registry until PersistAnt).
+
 ## 0.0.44
 - A4: the HTTP route. New `routes` module: `ack_route` adds `POST /ack/:alert_id` to an HTTPAnt `Server` (200 first and repeat ack, 401 bad or missing token, 404 unknown alert; empty body), `Clock`, `system_clock`. 3 tests over real HTTP on 127.0.0.1; mutation check: dropping the Authorization header fails the first-ack test. `AlertStore` and `DeviceRegistry` now require `Send + Sync` (a handler future holds them across an await); all in-tree implementors already were. New dependency `httpant-server` 0.7.5; `httpant-client` raised to 0.7.5 to match.
+
 ## 0.0.43
 - Docs only: HANDOFF current after #42.
 
