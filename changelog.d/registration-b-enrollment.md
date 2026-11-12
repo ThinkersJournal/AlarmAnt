@@ -1,0 +1,3 @@
+kind: registration slice (b): one-time enrolment code and store
+---
+- Registration slice (b): `enroll` module. `new_enrollment` makes a 128-bit code (32 hex digits, shown once) and its `Enrollment` (SHA-256 digest via `AckToken`, 10-minute expiry); `EnrollmentStore` with an atomic `consume` (right and unexpired: accepted once and removed; right but expired: removed and refused; wrong or reused: refused, and a wrong guess does not burn the real code); one pending enrolment, a new one replaces the old. `MemoryEnrollments`. Known-bad tests first (a stub that accepted anything failed 6 of 9: expired, reused, wrong, replaced, none pending, race); mutation check: `>=` to `>` at expiry fails the expiry test. No HTTP route yet (slice c).
