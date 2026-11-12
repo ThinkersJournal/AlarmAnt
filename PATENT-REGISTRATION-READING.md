@@ -2,6 +2,8 @@
 
 Date: 2026-11-11. Run by the AlarmAnt lane (Sonnet 5.5). **A model reading, not legal advice and not a freedom-to-operate opinion; there is no attorney.** Method: three standard web searches (below), then the claims of the closest hits read from Google Patents with `tools/patent-claims.py` (the page text, not the official USPTO record). The sweep as a whole stays incomplete: say "outside as read", never "clear".
 
+**Sweep incomplete; three databases untouched:** (1) the USPTO full-text search (PatFT/PPUBS query), (2) Espacenet, (3) WIPO PATENTSCOPE. Everything here came from three general web searches and Google Patents pages. The PM will ask whether CireSnave can add a full-text run to board 407's lookup.
+
 ## What was searched
 
 | # | Query (US web search) | Result |
