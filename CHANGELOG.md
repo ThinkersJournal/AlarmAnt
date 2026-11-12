@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.0.47
+- Docs only: `DESIGN-REGISTRATION.md`, the device-registration proposal (A9 gap): enrolment code, `/register`, FCM token rotation, revocation that also invalidates in-flight acks, what is stored in PersistAnt, what is never logged, the failure when registration is missing, and six open questions for the PM. Rulings recorded (PM 2026-11-11) and `PATENT-REGISTRATION-READING.md` added (a model reading, not legal advice). No code yet.
+
 ## 0.0.46
 - A7: `android/SIDELOAD.md`: build the debug APK, install with `adb install -r` or from the Files app, the first-run grants, updating, and what is not yet possible (registration, real pushes, release signing, physical-device testing). Docs only; nothing executed on a phone.
 
