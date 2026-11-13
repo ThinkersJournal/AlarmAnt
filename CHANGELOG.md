@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0 — **BREAKING**: escalation tiers are now second contact's app, then PC alarm
+
+Three-channel step 1a (board 389). The escalation state machine no longer texts or calls a phone number: on the fixed N-minute timer it now goes first-contact push, then `AlertChannel::second_app`, then `AlertChannel::pc_alarm`, then unresolved; an acknowledgement from anyone still ends it from any state. Removed: `Contact` (phone number), `AlertChannel::sms`/`voice`, `Stage::Sms`/`Voice` (now `SecondApp`/`PcAlarm`), `EscalationRecord::person2`, the `person2` argument of `Escalator::register`, `Alert::new`/`restore`, `EscalationConfig::new`/`with_default_minutes`, `ConfigError::Number`, and the `config` argument of `raise_escalating`. The phone still sends nothing but an acknowledgement and the timer fixes the pace (constraint 13). Adapters for the second push and the PC alarm, and the second recipient in the registry, follow in later slices. 140 tests, clippy clean.
+
 ## 0.0.60 — added
 
 Registration (f): operator commands. `alarmant enroll --contact first|second` makes the one-time enrolment code and shows it once; `alarmant revoke --contact first|second` deletes the device and voids its in-flight ack tokens. `--contact` is required and never guessed; there is no command that undoes a revocation. This slice is the command logic (`admin::parse`, `admin::run`); the binary and PersistAnt stores come with slice (g). Only `first` runs until the registry holds two recipients; `second` is refused with a plain message and changes nothing.
