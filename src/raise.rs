@@ -8,7 +8,7 @@
 use serde_json::{Value, json};
 
 use crate::AlertState;
-use crate::ack::{AckToken, AlertRecord, AlertStore, bearer_token};
+use crate::ack::{AckToken, AlertRecord, AlertStore, AlertText, bearer_token};
 use crate::fcm::{AlertMessage, DeviceToken, PushError, PushTransport};
 
 /// Longest accepted title, in characters. A lock screen shows about this much.
@@ -27,6 +27,11 @@ pub struct Device {
 /// Where the registered device comes from. A PersistAnt-backed registry replaces fixed config later.
 pub trait DeviceRegistry: Send + Sync {
     fn device(&self) -> Option<Device>;
+    /// The second contact's device, if registered (ruling 389). Registries that hold one
+    /// recipient keep this default.
+    fn second_device(&self) -> Option<Device> {
+        None
+    }
 }
 
 /// Why a raise failed, with the HTTP status to answer.
@@ -136,6 +141,11 @@ pub async fn raise_authorised(
         sent_at: now,
         acked_at: None,
         ack_token: device.ack_token.clone(),
+        second_ack_token: None,
+        text: Some(AlertText {
+            title: req.title.clone(),
+            body: req.body.clone(),
+        }),
     });
     // A revocation can land between the read above and the insert, after it already voided the
     // alerts it could see. Recheck, so that alert is voided too.
