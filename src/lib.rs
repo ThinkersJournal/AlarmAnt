@@ -12,6 +12,7 @@ pub mod auth;
 pub mod enroll;
 pub mod escalate;
 pub mod fcm;
+pub mod persist;
 pub mod push;
 pub mod raise;
 pub mod register;

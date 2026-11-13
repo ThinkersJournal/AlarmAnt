@@ -160,6 +160,14 @@ impl MemoryStore {
     }
 }
 
+impl MemoryStore {
+    pub(crate) fn snapshot(&self) -> Vec<AlertRecord> {
+        let mut v: Vec<_> = self.lock().values().cloned().collect();
+        v.sort_by(|a, b| a.alert_id.cmp(&b.alert_id));
+        v
+    }
+}
+
 impl AlertStore for MemoryStore {
     fn insert(&self, record: AlertRecord) {
         self.lock().insert(record.alert_id.clone(), record);

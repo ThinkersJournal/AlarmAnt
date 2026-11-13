@@ -61,6 +61,12 @@ impl MemoryDevices {
     }
 }
 
+impl MemoryDevices {
+    pub(crate) fn snapshot(&self) -> [Option<Device>; 2] {
+        self.lock().clone()
+    }
+}
+
 impl DeviceRegistry for MemoryDevices {
     fn device(&self) -> Option<Device> {
         self.lock()[Contact::First.index()].clone()
