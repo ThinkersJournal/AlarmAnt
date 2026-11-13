@@ -8,6 +8,7 @@
 
 pub mod ack;
 pub mod admin;
+pub mod adminapi;
 pub mod auth;
 pub mod enroll;
 pub mod escalate;
