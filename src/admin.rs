@@ -9,20 +9,14 @@
 //! text and keeps nothing; no function here logs. Revocation says only what the server did; it
 //! never contacts or tells the phone, and there is no command that undoes it.
 //!
-//! The registry holds one recipient today, so only `--contact first` runs; `second` is refused
-//! with a plain message until the two-recipient registry lands (ruling 389, step 1).
+//! Each contact has their own pending code and device slot; a command about one never touches the
+//! other.
 
 use crate::ack::AlertStore;
-use crate::enroll::{ENROLL_TTL_SECS, EnrollmentStore, new_enrollment};
+pub use crate::enroll::Contact;
+use crate::enroll::{ENROLL_TTL_SECS, EnrollmentStore, new_enrollment_for};
 use crate::register::DeviceStore;
-use crate::revoke::revoke;
-
-/// Which recipient a command is about.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Contact {
-    First,
-    Second,
-}
+use crate::revoke::revoke_contact;
 
 /// An operator command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,14 +29,12 @@ pub enum Command {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AdminError {
     Usage(&'static str),
-    /// The command is understood but not available yet.
-    Unavailable(&'static str),
 }
 
 impl AdminError {
     pub fn message(&self) -> &'static str {
         match self {
-            AdminError::Usage(m) | AdminError::Unavailable(m) => m,
+            AdminError::Usage(m) => m,
         }
     }
 }
@@ -78,25 +70,17 @@ pub fn run(
     alerts: &dyn AlertStore,
     now: u64,
 ) -> Result<String, AdminError> {
-    let contact = match command {
-        Command::Enroll(c) | Command::Revoke(c) => c,
-    };
-    if contact == Contact::Second {
-        return Err(AdminError::Unavailable(
-            "the second contact is not available yet: the registry holds one recipient",
-        ));
-    }
     match command {
-        Command::Enroll(_) => {
-            let (code, enrollment) = new_enrollment(now);
+        Command::Enroll(contact) => {
+            let (code, enrollment) = new_enrollment_for(contact, now);
             enrollments.set(enrollment);
             Ok(format!(
                 "Enrolment code (shown once, valid {} minutes, usable once):\n{code}\n",
                 ENROLL_TTL_SECS / 60
             ))
         }
-        Command::Revoke(_) => {
-            let r = revoke(devices, alerts);
+        Command::Revoke(contact) => {
+            let r = revoke_contact(devices, alerts, contact);
             Ok(if r.had_device {
                 format!(
                     "Device removed. {} alert(s) in flight no longer accept its token.\n",
@@ -220,19 +204,43 @@ mod tests {
     }
 
     #[test]
-    fn the_second_contact_is_refused_and_changes_nothing() {
+    fn enroll_second_makes_a_code_that_registers_the_second_slot_only() {
+        use crate::register::{FailureLimiter, register};
         let (e, d, a) = rig();
-        for c in [
-            Command::Enroll(Contact::Second),
-            Command::Revoke(Contact::Second),
-        ] {
-            assert!(matches!(
-                run(c, &e, &d, &a, 1000),
-                Err(AdminError::Unavailable(_))
-            ));
-        }
+        let out = run(Command::Enroll(Contact::Second), &e, &d, &a, 1000).unwrap();
+        let code = out.lines().find(|l| l.len() == 32).unwrap();
+        let lim = FailureLimiter::default();
+        register(
+            &e,
+            &d,
+            &lim,
+            Some(&format!("Bearer {code}")),
+            r#"{"fcm_token":"t2"}"#,
+            1001,
+        )
+        .unwrap();
+        assert!(d.second_device().is_some());
+        assert!(
+            d.device().unwrap().ack_token.matches("ack"),
+            "first is untouched"
+        );
+    }
+
+    #[test]
+    fn revoke_second_removes_only_the_second_device_and_voids_only_its_alerts() {
+        let (e, d, a) = rig();
+        d.set_for(
+            Contact::Second,
+            Device {
+                push_token: DeviceToken::new("fcm2"),
+                ack_token: AckToken::new("ack2"),
+            },
+        );
+        a.insert(AlertRecord::sent("a-2", 100, AckToken::new("ack2")));
+        let out = run(Command::Revoke(Contact::Second), &e, &d, &a, 1000).unwrap();
+        assert!(out.contains("1 alert(s)"));
+        assert!(d.second_device().is_none());
         assert!(d.device().is_some());
-        use crate::enroll::EnrollmentStore;
-        assert!(e.consume("anything", 1001).is_err());
+        assert!(a.get("a-1").unwrap().ack_token.matches("ack"));
     }
 }

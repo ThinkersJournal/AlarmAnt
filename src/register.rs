@@ -18,7 +18,7 @@ use std::sync::Mutex;
 use serde_json::{Value, json};
 
 use crate::ack::{AckToken, bearer_token};
-use crate::enroll::EnrollmentStore;
+use crate::enroll::{Contact, EnrollmentStore};
 use crate::fcm::DeviceToken;
 use crate::raise::{Device, DeviceRegistry};
 
@@ -31,48 +31,73 @@ pub const MAX_FCM_TOKEN_CHARS: usize = 4096;
 
 /// A device registry that can also be written. A PersistAnt-backed one replaces memory later.
 pub trait DeviceStore: DeviceRegistry {
-    /// Makes `d` the device, replacing any earlier one.
-    fn set(&self, d: Device);
-    /// Replaces the push token if `presented_ack` is the registered device's ack token; the ack
-    /// token itself is kept. False (and nothing changed) when no device is registered or the
-    /// token does not match. One step, so a concurrent re-registration cannot be overwritten.
+    /// Makes `d` the device for `contact`, replacing any earlier one in that slot.
+    fn set_for(&self, contact: Contact, d: Device);
+    /// [`set_for`](Self::set_for) the first contact.
+    fn set(&self, d: Device) {
+        self.set_for(Contact::First, d);
+    }
+    /// Replaces the push token if `presented_ack` is a registered device's ack token (either
+    /// contact's); the ack token itself is kept. False (and nothing changed) when no device
+    /// holds that token. One step, so a concurrent re-registration cannot be overwritten.
     fn replace_push_token(&self, presented_ack: &str, token: DeviceToken) -> bool;
-    /// Removes the device record and returns it. Revocation only: nothing restores it.
-    fn take(&self) -> Option<Device>;
+    /// Removes `contact`'s device record and returns it. Revocation only: nothing restores it.
+    fn take_for(&self, contact: Contact) -> Option<Device>;
+    /// [`take_for`](Self::take_for) the first contact.
+    fn take(&self) -> Option<Device> {
+        self.take_for(Contact::First)
+    }
 }
 
 /// In-memory [`DeviceStore`].
 #[derive(Debug, Default)]
 pub struct MemoryDevices {
-    device: Mutex<Option<Device>>,
+    devices: Mutex<[Option<Device>; 2]>,
+}
+
+impl MemoryDevices {
+    fn lock(&self) -> std::sync::MutexGuard<'_, [Option<Device>; 2]> {
+        self.devices.lock().unwrap_or_else(|p| p.into_inner())
+    }
 }
 
 impl DeviceRegistry for MemoryDevices {
     fn device(&self) -> Option<Device> {
-        self.device
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone()
+        self.lock()[Contact::First.index()].clone()
+    }
+
+    fn second_device(&self) -> Option<Device> {
+        self.lock()[Contact::Second.index()].clone()
     }
 }
 
 impl DeviceStore for MemoryDevices {
-    fn set(&self, d: Device) {
-        *self.device.lock().unwrap_or_else(|p| p.into_inner()) = Some(d);
+    fn set_for(&self, contact: Contact, d: Device) {
+        self.lock()[contact.index()] = Some(d);
     }
 
-    fn take(&self) -> Option<Device> {
-        self.device.lock().unwrap_or_else(|p| p.into_inner()).take()
+    fn take_for(&self, contact: Contact) -> Option<Device> {
+        self.lock()[contact.index()].take()
     }
 
     fn replace_push_token(&self, presented_ack: &str, token: DeviceToken) -> bool {
-        let mut g = self.device.lock().unwrap_or_else(|p| p.into_inner());
-        match g.as_mut() {
-            Some(d) if d.ack_token.matches(presented_ack) => {
+        let mut g = self.lock();
+        // Both slots are always checked, so timing does not say which contact matched.
+        let mut hit = None;
+        for (i, slot) in g.iter().enumerate() {
+            if slot
+                .as_ref()
+                .is_some_and(|d| d.ack_token.matches(presented_ack))
+            {
+                hit = Some(i);
+            }
+        }
+        match hit.and_then(|i| g[i].as_mut()) {
+            Some(d) => {
                 d.push_token = token;
                 true
             }
-            _ => false,
+            None => false,
         }
     }
 }
@@ -154,21 +179,24 @@ pub fn register(
     let fcm = parse_fcm_token(body)?;
     // The code is always checked, so a valid one passes whatever came before it; only a failure
     // is counted, and the count only changes which refusal is answered.
-    let accepted = authorization
+    let contact = authorization
         .and_then(bearer_token)
-        .is_some_and(|code| enrollments.consume(code, now).is_ok());
-    if !accepted {
+        .and_then(|code| enrollments.consume(code, now).ok());
+    let Some(contact) = contact else {
         return Err(if limiter.record_failure(now) {
             RegisterError::TooManyFailures
         } else {
             RegisterError::Unauthorized
         });
-    }
+    };
     let token = new_ack_token();
-    devices.set(Device {
-        push_token: DeviceToken::new(fcm),
-        ack_token: AckToken::new(&token),
-    });
+    devices.set_for(
+        contact,
+        Device {
+            push_token: DeviceToken::new(fcm),
+            ack_token: AckToken::new(&token),
+        },
+    );
     Ok(token)
 }
 
@@ -196,9 +224,10 @@ pub fn update_token(
             }
         }
         Err(bad) => {
-            if devices
-                .device()
-                .is_some_and(|d| d.ack_token.matches(presented))
+            if [devices.device(), devices.second_device()]
+                .iter()
+                .flatten()
+                .any(|d| d.ack_token.matches(presented))
             {
                 Err(bad)
             } else {
@@ -466,5 +495,34 @@ mod tests {
                 .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
         );
         assert_ne!(a, new_ack_token());
+    }
+
+    #[test]
+    fn the_second_contact_registers_and_rotates_their_token_without_touching_the_first() {
+        use crate::enroll::{Contact, new_enrollment_for};
+        let r = rig();
+        let first = go(&r, Some(&format!("Bearer {}", r.code)), BODY, 1001).unwrap();
+        let (code2, e2) = new_enrollment_for(Contact::Second, 1002);
+        r.enr.set(e2);
+        let second = go(
+            &r,
+            Some(&format!("Bearer {code2}")),
+            r#"{"fcm_token":"t2"}"#,
+            1003,
+        )
+        .unwrap();
+        assert_ne!(first, second);
+        assert!(r.dev.device().unwrap().ack_token.matches(&first));
+        assert!(r.dev.second_device().unwrap().ack_token.matches(&second));
+        let bearer = format!("Bearer {second}");
+        assert_eq!(
+            update_token(&r.dev, Some(&bearer), r#"{"fcm_token":"t3"}"#),
+            Ok(())
+        );
+        assert!(
+            r.dev
+                .device()
+                .is_some_and(|d| d.push_token.expose() == "tok-abc")
+        );
     }
 }
