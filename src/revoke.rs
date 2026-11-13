@@ -9,6 +9,7 @@
 //! Nothing here logs, and nothing carries a token.
 
 use crate::ack::AlertStore;
+use crate::enroll::Contact;
 use crate::register::DeviceStore;
 
 /// What one revocation did, for the operator's screen and the audit event.
@@ -25,7 +26,16 @@ pub struct Revoked {
 /// ones are being voided ([`crate::raise::raise_authorised`] rechecks for one already mid-raise).
 /// Revoking with no device registered does nothing.
 pub fn revoke(devices: &dyn DeviceStore, alerts: &dyn AlertStore) -> Revoked {
-    match devices.take() {
+    revoke_contact(devices, alerts, Contact::First)
+}
+
+/// [`revoke`] for a chosen contact: only that contact's device goes, and only its token is voided.
+pub fn revoke_contact(
+    devices: &dyn DeviceStore,
+    alerts: &dyn AlertStore,
+    contact: Contact,
+) -> Revoked {
+    match devices.take_for(contact) {
         Some(device) => Revoked {
             had_device: true,
             alerts_voided: alerts.void_ack_tokens(&device.ack_token),
