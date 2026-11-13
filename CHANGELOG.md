@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.57 — registration slice (d): PUT /device/token
+
+- Registration slice (d): `update_token` and `PUT /device/token`. The phone presents its ack token as `Authorization: Bearer` with `{"fcm_token"}` after Firebase rotates its token; the push token is replaced in one step with the credential check (`DeviceStore::replace_push_token`), the ack token is kept. The credential is checked before the body, so a stranger gets 401 whatever they send; missing, wrong, enrolment-code-as-bearer, digest-as-bearer and no-device all answer one fixed 401; a bad body with the right token is 400 and changes nothing; 413 over 16 KiB; answers are `no-store`. Nothing is reported about delivery and nothing escalates (patent rule: the phone sends no status the sender acts on). Known-bad stub (accepts anything) failed all 4 new unit tests first; mutation check: matching any non-empty token fails the 401 test. 5 new tests (4 unit, 1 over real HTTP). Left for later slices: revocation, CLI, PersistAnt, stale marking on UNREGISTERED.
+
 ## 0.0.56 — registration slice (c): POST /register with a failures-only limiter
 
 - Registration slice (c): `register` module and `POST /register` route. Bearer enrolment code plus `{"fcm_token"}`; a valid code makes the phone the device and answers `201 {"ack_token"}` once (`Cache-Control: no-store`; only the digest is kept); wrong, missing, reused and expired codes answer one fixed 401. `FailureLimiter` counts failed attempts only (5 in 60 s, then 429): the code is always checked first, so a valid code passes after any flood. A bad body is 400 before the code is spent; 413 over 16 KiB. `DeviceStore` and `MemoryDevices`. Known-bad stub (accepts anything) failed the 401 and 429 tests first; mutation check: not recording failures fails the 429 test. 10 new tests (8 unit, 2 over real HTTP). Left for later slices: audit events, PersistAnt backends, revocation.
