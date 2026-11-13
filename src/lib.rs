@@ -14,6 +14,7 @@ pub mod fcm;
 pub mod push;
 pub mod raise;
 pub mod register;
+pub mod revoke;
 pub mod routes;
 pub mod selftest;
 pub mod wire;
