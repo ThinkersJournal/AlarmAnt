@@ -7,15 +7,18 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use httpant_server::Server;
-use httpant_server::core::http::StatusCode;
 use httpant_server::core::http::header::{AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, HeaderValue};
+use httpant_server::core::http::{Method, StatusCode};
 use httpant_server::core::{Body, IntoResponse, PathParams, Request, Response};
 
 use crate::ack::{AckToken, AlertStore, acknowledge};
 use crate::enroll::EnrollmentStore;
 use crate::fcm::PushTransport;
 use crate::raise::{DeviceRegistry, raise_alert, response};
-use crate::register::{DeviceStore, FailureLimiter, register, response as register_response};
+use crate::register::{
+    DeviceStore, FailureLimiter, register, response as register_response, token_response,
+    update_token,
+};
 
 /// Largest request body read for `POST /alert`: the title and body limits at four bytes a
 /// character, plus JSON framing, rounded up.
@@ -195,6 +198,29 @@ pub fn register_route(server: Server, cfg: RegisterConfig) -> Server {
             };
             let result = register(&*enr, &*dev, &lim, auth.as_deref(), text, clock());
             let (status, body) = register_response(&result);
+            let mut res = json_response(status, &body);
+            res.headers_mut()
+                .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            res
+        }
+    })
+}
+
+/// Adds `PUT /device/token` (registration slice d): `Authorization: Bearer <ack token>`, JSON
+/// `{"fcm_token"}` after the phone's push token rotates. Answers 200, or 400, 401, 413 with fixed
+/// text. Changes only the push token; it reports nothing about delivery and escalates nothing.
+pub fn device_token_route(server: Server, devices: Arc<dyn DeviceStore>) -> Server {
+    server.route(Method::PUT, "/device/token", move |req: Request| {
+        let dev = Arc::clone(&devices);
+        async move {
+            let auth = authorization(&req).map(str::to_owned);
+            let Ok(bytes) = req.into_body().bytes(MAX_REGISTER_BODY_BYTES).await else {
+                return json_response(413, &serde_json::json!({"error": "body too large"}));
+            };
+            let Ok(text) = std::str::from_utf8(&bytes) else {
+                return json_response(400, &serde_json::json!({"error": "body is not UTF-8"}));
+            };
+            let (status, body) = token_response(&update_token(&*dev, auth.as_deref(), text));
             let mut res = json_response(status, &body);
             res.headers_mut()
                 .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
@@ -580,5 +606,37 @@ mod tests {
         assert_eq!(reg(&rig.srv, Some(&auth), big).await.0, 413);
         let _ = &rig.enr;
         rig.srv.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn put_device_token_over_http_rotates_the_push_token_for_the_ack_token_only() {
+        let dev = Arc::new(MemoryDevices::default());
+        dev.set(Device {
+            push_token: DeviceToken::new("old-tok"),
+            ack_token: AckToken::new("ack-secret"),
+        });
+        let srv = device_token_route(Server::new(), Arc::clone(&dev) as Arc<dyn DeviceStore>)
+            .bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let put = |auth: Option<&'static str>, body: &'static str| {
+            let url = format!("http://{}/device/token", srv.addr());
+            async move {
+                let mut r = Client::new().put(url).body(body);
+                if let Some(a) = auth {
+                    r = r.header("authorization", a);
+                }
+                r.send().await.unwrap().status().as_u16()
+            }
+        };
+        let body = r#"{"fcm_token":"new-tok"}"#;
+        assert_eq!(put(None, body).await, 401);
+        assert_eq!(put(Some("Bearer wrong"), body).await, 401);
+        assert_eq!(dev.device().unwrap().push_token.expose(), "old-tok");
+        assert_eq!(put(Some("Bearer ack-secret"), "{}").await, 400);
+        assert_eq!(put(Some("Bearer ack-secret"), body).await, 200);
+        assert_eq!(dev.device().unwrap().push_token.expose(), "new-tok");
+        assert!(dev.device().unwrap().ack_token.matches("ack-secret"));
+        srv.shutdown().await.unwrap();
     }
 }
