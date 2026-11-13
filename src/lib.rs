@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 
 pub mod ack;
+pub mod admin;
 pub mod auth;
 pub mod enroll;
 pub mod escalate;
