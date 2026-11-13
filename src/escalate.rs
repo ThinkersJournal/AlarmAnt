@@ -8,17 +8,15 @@
 
 use std::collections::BTreeMap;
 
-use crate::{Alert, AlertChannel, AlertEvent, AlertState, Contact, Outcome, Stage};
+use crate::{Alert, AlertChannel, AlertEvent, AlertState, Outcome, Stage};
 
 /// Default `N`, in minutes.
 pub const DEFAULT_MINUTES: u64 = 5;
 
-/// What is stored for one open alert. Person 2's number is inside the
-/// [`Contact`], which never prints it.
+/// What is stored for one open alert.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EscalationRecord {
     pub alert_id: String,
-    pub person2: Contact,
     pub state: AlertState,
     pub stage: Stage,
     /// Unix seconds of the next timeout; `None` once unresolved.
@@ -73,7 +71,6 @@ impl<S: EscalationStore + ?Sized> EscalationStore for std::sync::Arc<S> {
 fn record_of(entry: &Entry) -> EscalationRecord {
     EscalationRecord {
         alert_id: entry.alert.id().to_string(),
-        person2: entry.alert.person2().clone(),
         state: entry.alert.state(),
         stage: entry.alert.stage(),
         due: entry.due,
@@ -116,7 +113,7 @@ impl Escalator {
             e.open.insert(
                 r.alert_id.clone(),
                 Entry {
-                    alert: Alert::restore(r.alert_id, r.person2, r.state, r.stage),
+                    alert: Alert::restore(r.alert_id, r.state, r.stage),
                     due: r.due,
                 },
             );
@@ -127,12 +124,12 @@ impl Escalator {
 
     /// Start the timer for an alert already sent to person 1 at `now`.
     /// Returns false (and changes nothing) if `alert_id` is already open.
-    pub fn register(&mut self, alert_id: &str, person2: Contact, now: u64) -> bool {
+    pub fn register(&mut self, alert_id: &str, now: u64) -> bool {
         if self.open.contains_key(alert_id) {
             return false;
         }
         let entry = Entry {
-            alert: Alert::new(alert_id, person2),
+            alert: Alert::new(alert_id),
             due: Some(now + self.timeout_secs),
         };
         if let Some(store) = &self.store {
@@ -195,24 +192,20 @@ mod tests {
     struct Fake(RefCell<Vec<String>>);
 
     impl AlertChannel for Fake {
-        fn sms(&self, _: &Contact, id: &str) -> Result<(), ChannelError> {
-            self.0.borrow_mut().push(format!("sms {id}"));
+        fn second_app(&self, id: &str) -> Result<(), ChannelError> {
+            self.0.borrow_mut().push(format!("second_app {id}"));
             Ok(())
         }
-        fn voice(&self, _: &Contact, id: &str) -> Result<(), ChannelError> {
-            self.0.borrow_mut().push(format!("voice {id}"));
+        fn pc_alarm(&self, id: &str) -> Result<(), ChannelError> {
+            self.0.borrow_mut().push(format!("pc_alarm {id}"));
             Ok(())
         }
-    }
-
-    fn contact() -> Contact {
-        Contact::new("+15550100")
     }
 
     #[test]
     fn nothing_fires_before_n_minutes() {
         let (mut e, ch) = (Escalator::new(5), Fake::default());
-        e.register("a", contact(), 1000);
+        e.register("a", 1000);
         assert!(e.tick(1000 + 299, &ch).is_empty());
         assert!(ch.0.borrow().is_empty());
         assert_eq!(e.next_due(), Some(1300));
@@ -221,7 +214,7 @@ mod tests {
     #[test]
     fn full_chain_on_a_fixed_timer() {
         let (mut e, ch) = (Escalator::new(5), Fake::default());
-        e.register("a", contact(), 0);
+        e.register("a", 0);
         let r = e.tick(300, &ch);
         assert_eq!(r[0].1.audit, vec![AuditEvent::Escalated]);
         assert_eq!(e.state("a"), Some(AlertState::Escalated));
@@ -230,7 +223,7 @@ mod tests {
         let r = e.tick(900, &ch);
         assert_eq!(r[0].1.audit, vec![AuditEvent::Unresolved]);
         assert_eq!(e.state("a"), Some(AlertState::Unresolved));
-        assert_eq!(*ch.0.borrow(), vec!["sms a", "voice a"]);
+        assert_eq!(*ch.0.borrow(), vec!["second_app a", "pc_alarm a"]);
         assert_eq!(e.next_due(), None, "no timer once unresolved");
         assert!(e.tick(99_999, &ch).is_empty(), "no third tier");
     }
@@ -238,16 +231,16 @@ mod tests {
     #[test]
     fn late_tick_fires_one_step_only() {
         let (mut e, ch) = (Escalator::new(5), Fake::default());
-        e.register("a", contact(), 0);
+        e.register("a", 0);
         e.tick(10_000, &ch);
-        assert_eq!(*ch.0.borrow(), vec!["sms a"]);
+        assert_eq!(*ch.0.borrow(), vec!["second_app a"]);
         assert_eq!(e.next_due(), Some(10_300));
     }
 
     #[test]
     fn ack_cancels_the_timer() {
         let (mut e, ch) = (Escalator::new(5), Fake::default());
-        e.register("a", contact(), 0);
+        e.register("a", 0);
         let out = e.ack("a", &ch).unwrap();
         assert_eq!(out.audit, vec![AuditEvent::Acked]);
         assert_eq!(e.state("a"), None);
@@ -260,7 +253,7 @@ mod tests {
     #[test]
     fn ack_ends_an_unresolved_alert() {
         let (mut e, ch) = (Escalator::new(1), Fake::default());
-        e.register("a", contact(), 0);
+        e.register("a", 0);
         for t in [60, 120, 180] {
             e.tick(t, &ch);
         }
@@ -272,9 +265,9 @@ mod tests {
     #[test]
     fn alerts_are_independent_and_duplicates_refused() {
         let (mut e, ch) = (Escalator::new(5), Fake::default());
-        assert!(e.register("a", contact(), 0));
-        assert!(e.register("b", contact(), 100));
-        assert!(!e.register("a", contact(), 200), "duplicate id");
+        assert!(e.register("a", 0));
+        assert!(e.register("b", 100));
+        assert!(!e.register("a", 200), "duplicate id");
         let r = e.tick(300, &ch);
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].0, "a");
@@ -287,8 +280,8 @@ mod tests {
         let store = std::sync::Arc::new(MemoryEscalationStore::default());
         let ch = Fake::default();
         let mut e = Escalator::with_store(5, Box::new(store.clone()));
-        e.register("a", contact(), 0);
-        e.register("b", contact(), 0);
+        e.register("a", 0);
+        e.register("b", 0);
         e.tick(300, &ch); // both texted
         e.ack("b", &ch);
         drop(e); // restart
@@ -299,7 +292,10 @@ mod tests {
         assert_eq!(e.next_due(), Some(600));
         // Down for an hour: one step on the next tick (the call), not unresolved.
         e.tick(4000, &ch);
-        assert_eq!(*ch.0.borrow(), vec!["sms a", "sms b", "voice a"]);
+        assert_eq!(
+            *ch.0.borrow(),
+            vec!["second_app a", "second_app b", "pc_alarm a"]
+        );
         assert_eq!(e.state("a"), Some(AlertState::Escalated));
     }
 
@@ -308,7 +304,7 @@ mod tests {
         let store = std::sync::Arc::new(MemoryEscalationStore::default());
         let ch = Fake::default();
         let mut e = Escalator::with_store(1, Box::new(store.clone()));
-        e.register("a", contact(), 0);
+        e.register("a", 0);
         for t in [60, 120, 180] {
             e.tick(t, &ch);
         }
@@ -319,17 +315,6 @@ mod tests {
         assert!(e.tick(9999, &ch).is_empty());
         assert!(e.ack("a", &ch).is_some());
         assert!(store.load_all().is_empty());
-    }
-
-    #[test]
-    fn stored_record_never_prints_the_number() {
-        let store = std::sync::Arc::new(MemoryEscalationStore::default());
-        let mut e = Escalator::with_store(5, Box::new(store.clone()));
-        e.register("a", contact(), 0);
-        let saved = store.load_all();
-        assert_eq!(saved.len(), 1);
-        assert_eq!(saved[0].person2.number(), "+15550100");
-        assert!(!format!("{saved:?}").contains("5550100"));
     }
 
     fn store_with(records: Vec<EscalationRecord>) -> std::sync::Arc<MemoryEscalationStore> {
@@ -343,7 +328,6 @@ mod tests {
     fn rec(id: &str, state: AlertState, stage: Stage, due: Option<u64>) -> EscalationRecord {
         EscalationRecord {
             alert_id: id.into(),
-            person2: contact(),
             state,
             stage,
             due,
@@ -362,8 +346,8 @@ mod tests {
     fn every_overdue_alert_fires_exactly_one_step_after_a_long_outage() {
         let s = store_with(vec![
             rec("a", AlertState::Sent, Stage::First, Some(10)),
-            rec("b", AlertState::Escalated, Stage::Sms, Some(20)),
-            rec("c", AlertState::Escalated, Stage::Voice, Some(30)),
+            rec("b", AlertState::Escalated, Stage::SecondApp, Some(20)),
+            rec("c", AlertState::Escalated, Stage::PcAlarm, Some(30)),
         ]);
         let (mut e, ch) = (
             Escalator::with_store(5, Box::new(s.clone())),
@@ -371,7 +355,7 @@ mod tests {
         );
         let fired = e.tick(1_000_000, &ch);
         assert_eq!(fired.len(), 3);
-        assert_eq!(*ch.0.borrow(), vec!["sms a", "voice b"]);
+        assert_eq!(*ch.0.borrow(), vec!["second_app a", "pc_alarm b"]);
         assert_eq!(e.state("a"), Some(AlertState::Escalated));
         assert_eq!(e.state("b"), Some(AlertState::Escalated));
         assert_eq!(e.state("c"), Some(AlertState::Unresolved));
@@ -387,13 +371,19 @@ mod tests {
             Escalator::with_store(5, Box::new(s.clone())),
             Fake::default(),
         );
-        e.register("a", contact(), 0);
+        e.register("a", 0);
         let saved = |s: &MemoryEscalationStore| s.load_all().remove(0);
         assert_eq!((saved(&s).stage, saved(&s).due), (Stage::First, Some(300)));
         e.tick(300, &ch);
-        assert_eq!((saved(&s).stage, saved(&s).due), (Stage::Sms, Some(600)));
+        assert_eq!(
+            (saved(&s).stage, saved(&s).due),
+            (Stage::SecondApp, Some(600))
+        );
         e.tick(600, &ch);
-        assert_eq!((saved(&s).stage, saved(&s).due), (Stage::Voice, Some(900)));
+        assert_eq!(
+            (saved(&s).stage, saved(&s).due),
+            (Stage::PcAlarm, Some(900))
+        );
         e.tick(900, &ch);
         let r = saved(&s);
         assert_eq!((r.state, r.due), (AlertState::Unresolved, None));
@@ -404,7 +394,7 @@ mod tests {
         let s = store_with(vec![rec(
             "a",
             AlertState::Escalated,
-            Stage::Voice,
+            Stage::PcAlarm,
             Some(900),
         )]);
         let (mut e, ch) = (Escalator::with_store(5, Box::new(s)), Fake::default());
@@ -415,7 +405,7 @@ mod tests {
 
     #[test]
     fn a_stored_acked_record_is_dropped_on_load() {
-        let s = store_with(vec![rec("a", AlertState::Acked, Stage::Sms, None)]);
+        let s = store_with(vec![rec("a", AlertState::Acked, Stage::SecondApp, None)]);
         let (mut e, ch) = (
             Escalator::with_store(5, Box::new(s.clone())),
             Fake::default(),
@@ -436,7 +426,7 @@ mod tests {
     #[test]
     fn zero_minutes_is_raised_to_one() {
         let (mut e, ch) = (Escalator::new(0), Fake::default());
-        e.register("a", contact(), 0);
+        e.register("a", 0);
         assert!(e.tick(59, &ch).is_empty());
         assert_eq!(e.tick(60, &ch).len(), 1);
     }

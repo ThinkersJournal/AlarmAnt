@@ -20,8 +20,6 @@ pub mod routes;
 pub mod selftest;
 pub mod wire;
 
-use std::fmt;
-
 /// Where an alert stands. Flat chain: person 1, then person 2, no third tier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlertState {
@@ -63,33 +61,6 @@ impl AuditEvent {
     }
 }
 
-/// Person 2's phone number. Personal data: `Debug` and `Display` never show it.
-#[derive(Clone, PartialEq, Eq)]
-pub struct Contact(String);
-
-impl Contact {
-    pub fn new(number: impl Into<String>) -> Self {
-        Contact(number.into())
-    }
-
-    /// The raw number, for the channel adapter only.
-    pub fn number(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Debug for Contact {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Contact(<redacted>)")
-    }
-}
-
-impl fmt::Display for Contact {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("<redacted>")
-    }
-}
-
 /// A channel failure. The state machine never retries; `retryable` is for the adapter's caller.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChannelError {
@@ -97,12 +68,13 @@ pub struct ChannelError {
     pub message: String,
 }
 
-/// How person 2 is reached. Adapters (SMSKit or a provider) implement this later.
+/// How the later tiers are reached (ruling 389). Adapters implement this: the second contact's app
+/// push, and the PC alarm. Neither call carries a phone number, and nothing here reads a reply.
 pub trait AlertChannel {
-    /// Send the alert to `to` by SMS.
-    fn sms(&self, to: &Contact, alert_id: &str) -> Result<(), ChannelError>;
-    /// Place a voice call to `to`.
-    fn voice(&self, to: &Contact, alert_id: &str) -> Result<(), ChannelError>;
+    /// Push the alert to the second contact's app.
+    fn second_app(&self, alert_id: &str) -> Result<(), ChannelError>;
+    /// Raise the PC alarm for the alert.
+    fn pc_alarm(&self, alert_id: &str) -> Result<(), ChannelError>;
 }
 
 /// What one [`Alert::on`] call did.
@@ -117,41 +89,36 @@ pub struct Outcome {
 /// How far down the flat chain an alert has gone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stage {
+    /// Sent to the first contact's app.
     First,
-    Sms,
-    Voice,
+    /// The second contact's app has been pushed.
+    SecondApp,
+    /// The PC alarm has been raised.
+    PcAlarm,
 }
 
 /// One alert's escalation state.
 #[derive(Debug)]
 pub struct Alert {
     id: String,
-    person2: Contact,
     state: AlertState,
     stage: Stage,
 }
 
 impl Alert {
-    /// A new alert already sent to person 1.
-    pub fn new(id: impl Into<String>, person2: Contact) -> Self {
+    /// A new alert already pushed to the first contact.
+    pub fn new(id: impl Into<String>) -> Self {
         Alert {
             id: id.into(),
-            person2,
             state: AlertState::Sent,
             stage: Stage::First,
         }
     }
 
     /// Rebuild an alert from stored parts (after a restart).
-    pub fn restore(
-        id: impl Into<String>,
-        person2: Contact,
-        state: AlertState,
-        stage: Stage,
-    ) -> Self {
+    pub fn restore(id: impl Into<String>, state: AlertState, stage: Stage) -> Self {
         Alert {
             id: id.into(),
-            person2,
             state,
             stage,
         }
@@ -159,10 +126,6 @@ impl Alert {
 
     pub fn id(&self) -> &str {
         &self.id
-    }
-
-    pub fn person2(&self) -> &Contact {
-        &self.person2
     }
 
     pub fn stage(&self) -> Stage {
@@ -173,8 +136,8 @@ impl Alert {
         self.state
     }
 
-    /// Apply an event. Person 2 is texted on the first timeout and called on
-    /// the second; the third ends in [`AlertState::Unresolved`]. An
+    /// Apply an event. The second contact's app is pushed on the first timeout and the PC alarm
+    /// raised on the second; the third ends in [`AlertState::Unresolved`]. An
     /// acknowledgement from anyone ends the alert from any state, and later
     /// events on an acknowledged alert do nothing.
     pub fn on(&mut self, event: AlertEvent, channel: &dyn AlertChannel) -> Outcome {
@@ -188,20 +151,20 @@ impl Alert {
             (AlertState::Unresolved, AlertEvent::TimeoutElapsed) => {}
             (_, AlertEvent::TimeoutElapsed) => match self.stage {
                 Stage::First => {
-                    self.stage = Stage::Sms;
+                    self.stage = Stage::SecondApp;
                     self.state = AlertState::Escalated;
                     out.audit.push(AuditEvent::Escalated);
-                    if let Err(e) = channel.sms(&self.person2, &self.id) {
+                    if let Err(e) = channel.second_app(&self.id) {
                         out.send_errors.push(e);
                     }
                 }
-                Stage::Sms => {
-                    self.stage = Stage::Voice;
-                    if let Err(e) = channel.voice(&self.person2, &self.id) {
+                Stage::SecondApp => {
+                    self.stage = Stage::PcAlarm;
+                    if let Err(e) = channel.pc_alarm(&self.id) {
                         out.send_errors.push(e);
                     }
                 }
-                Stage::Voice => {
+                Stage::PcAlarm => {
                     self.state = AlertState::Unresolved;
                     out.audit.push(AuditEvent::Unresolved);
                 }
@@ -236,22 +199,22 @@ mod tests {
     }
 
     impl AlertChannel for Fake {
-        fn sms(&self, _: &Contact, _: &str) -> Result<(), ChannelError> {
-            self.calls.borrow_mut().push("sms");
+        fn second_app(&self, _: &str) -> Result<(), ChannelError> {
+            self.calls.borrow_mut().push("second_app");
             self.result()
         }
-        fn voice(&self, _: &Contact, _: &str) -> Result<(), ChannelError> {
-            self.calls.borrow_mut().push("voice");
+        fn pc_alarm(&self, _: &str) -> Result<(), ChannelError> {
+            self.calls.borrow_mut().push("pc_alarm");
             self.result()
         }
     }
 
     fn alert() -> Alert {
-        Alert::new("a1", Contact::new("+15550100"))
+        Alert::new("a1")
     }
 
     #[test]
-    fn full_chain_sms_then_voice_then_unresolved() {
+    fn full_chain_second_app_then_pc_alarm_then_unresolved() {
         let (mut a, ch) = (alert(), Fake::default());
         assert_eq!(
             a.on(AlertEvent::TimeoutElapsed, &ch).audit,
@@ -265,7 +228,7 @@ mod tests {
             vec![AuditEvent::Unresolved]
         );
         assert_eq!(a.state(), AlertState::Unresolved);
-        assert_eq!(*ch.calls.borrow(), vec!["sms", "voice"]);
+        assert_eq!(*ch.calls.borrow(), vec!["second_app", "pc_alarm"]);
         // No third tier: further timeouts do nothing.
         assert_eq!(a.on(AlertEvent::TimeoutElapsed, &ch), Outcome::default());
         assert_eq!(ch.calls.borrow().len(), 2);
@@ -314,17 +277,9 @@ mod tests {
         assert_eq!(a.state(), AlertState::Escalated);
         assert_eq!(
             *ch.calls.borrow(),
-            vec!["sms"],
+            vec!["second_app"],
             "no retry inside the state machine"
         );
-    }
-
-    #[test]
-    fn contact_never_prints_the_number() {
-        let c = Contact::new("+15550100");
-        assert!(!format!("{c:?} {c}").contains("5550100"));
-        assert!(!format!("{:?}", alert()).contains("5550100"));
-        assert_eq!(c.number(), "+15550100");
     }
 
     #[test]
