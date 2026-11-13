@@ -135,8 +135,16 @@ pub async fn raise_authorised(
         state: AlertState::Sent,
         sent_at: now,
         acked_at: None,
-        ack_token: device.ack_token,
+        ack_token: device.ack_token.clone(),
     });
+    // A revocation can land between the read above and the insert, after it already voided the
+    // alerts it could see. Recheck, so that alert is voided too.
+    if !devices
+        .device()
+        .is_some_and(|d| d.ack_token.same_digest(&device.ack_token))
+    {
+        store.void_ack_tokens(&device.ack_token);
+    }
     let message = AlertMessage {
         alert_id: alert_id.clone(),
         title: req.title,
@@ -221,6 +229,27 @@ mod tests {
             push_token: DeviceToken::new("fcm-tok"),
             ack_token: AckToken::new("ack-tok"),
         }))
+    }
+
+    /// A registry whose device is revoked right after the first read: the race between a raise and
+    /// a revocation.
+    struct Vanishing(Mutex<Option<Device>>);
+
+    impl DeviceRegistry for Vanishing {
+        fn device(&self) -> Option<Device> {
+            self.0.lock().unwrap().take()
+        }
+    }
+
+    #[test]
+    fn an_alert_raised_while_the_device_is_revoked_cannot_be_acked_by_the_old_token() {
+        let reg = Vanishing(Mutex::new(device().0));
+        let (t, s) = (Fake::default(), MemoryStore::default());
+        let id = block_on(raise_authorised(OK_BODY, &reg, &t, &s, 10)).unwrap();
+        assert_eq!(
+            crate::ack::acknowledge(&s, &id, Some("Bearer ack-tok"), 20),
+            crate::ack::AckOutcome::Unauthorized
+        );
     }
 
     const KEY: Option<&str> = Some("Bearer key");

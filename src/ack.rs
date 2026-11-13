@@ -51,6 +51,17 @@ impl AckToken {
         self.0.iter().map(|b| format!("{b:02x}")).collect()
     }
 
+    /// A token no presented value can match (revocation): all-zero digest, which has no preimage
+    /// anyone can find.
+    pub fn void() -> Self {
+        AckToken([0u8; 32])
+    }
+
+    /// True when both hold the same digest. Compares digests, never a presented secret.
+    pub fn same_digest(&self, other: &AckToken) -> bool {
+        self.0 == other.0
+    }
+
     /// Hashes `presented` and compares the digests in time that does not depend on where the
     /// first difference is.
     pub fn matches(&self, presented: &str) -> bool {
@@ -110,6 +121,10 @@ pub trait AlertStore: Send + Sync {
     /// Moves the alert to `Acked` at `at` if it is not already. Must be atomic, so two racing
     /// calls report `Some(true)` once. `None`: no such alert. `Some(false)`: already acked.
     fn mark_acked(&self, alert_id: &str, at: u64) -> Option<bool>;
+    /// Revocation: every alert that is not acknowledged and holds `revoked` stops accepting it
+    /// (its token becomes [`AckToken::void`]). Acknowledged alerts are left as they are. Returns
+    /// how many alerts were changed.
+    fn void_ack_tokens(&self, revoked: &AckToken) -> usize;
 }
 
 /// In-memory [`AlertStore`], for tests and a single-process service until PersistAnt is wired.
@@ -150,6 +165,17 @@ impl AlertStore for MemoryStore {
         r.state = AlertState::Acked;
         r.acked_at = Some(at);
         Some(true)
+    }
+
+    fn void_ack_tokens(&self, revoked: &AckToken) -> usize {
+        let mut n = 0;
+        for r in self.lock().values_mut() {
+            if r.state != AlertState::Acked && r.ack_token.same_digest(revoked) {
+                r.ack_token = AckToken::void();
+                n += 1;
+            }
+        }
+        n
     }
 }
 

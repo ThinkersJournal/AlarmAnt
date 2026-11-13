@@ -37,6 +37,8 @@ pub trait DeviceStore: DeviceRegistry {
     /// token itself is kept. False (and nothing changed) when no device is registered or the
     /// token does not match. One step, so a concurrent re-registration cannot be overwritten.
     fn replace_push_token(&self, presented_ack: &str, token: DeviceToken) -> bool;
+    /// Removes the device record and returns it. Revocation only: nothing restores it.
+    fn take(&self) -> Option<Device>;
 }
 
 /// In-memory [`DeviceStore`].
@@ -57,6 +59,10 @@ impl DeviceRegistry for MemoryDevices {
 impl DeviceStore for MemoryDevices {
     fn set(&self, d: Device) {
         *self.device.lock().unwrap_or_else(|p| p.into_inner()) = Some(d);
+    }
+
+    fn take(&self) -> Option<Device> {
+        self.device.lock().unwrap_or_else(|p| p.into_inner()).take()
     }
 
     fn replace_push_token(&self, presented_ack: &str, token: DeviceToken) -> bool {
