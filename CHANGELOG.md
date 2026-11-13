@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 — **BREAKING**: `EnrollmentStore::consume` now answers the contact; `DeviceStore` is keyed by contact
+
+Three-channel step 1c (board 389): the second contact can be enrolled, registered and revoked. `enroll::Contact` (First, Second) replaces `admin::Contact` (still re-exported); an `Enrollment` names its contact, the store holds one pending code per contact (a new code for one leaves the other's alone), and `EnrollmentStore::consume` returns the contact the code was for. `DeviceStore` gains `set_for`/`take_for` (`set`/`take` are the first contact's), `MemoryDevices` holds both slots, `POST /register` stores the device in the slot its code was made for, and `PUT /device/token` rotates the push token for whichever contact's ack token is presented. `revoke::revoke_contact` and `alarmant enroll|revoke --contact second` now run (the refusal and `AdminError::Unavailable` are gone); revoking one contact deletes only that device and voids only its tokens. Nothing new is reported to a phone. 154 tests; limiting the token-rotation check to the first slot fails a named test.
+
 ## 0.1.1 — added
 
 Three-channel step 1b (board 389): the second contact's app push. `second::push_second` sends the same alert text to the second recipient (`DeviceRegistry::second_device`, default none) and records their ack token on the alert (`AlertRecord::second_ack_token`, `AlertStore::set_second_ack_token`); `acknowledge` then accepts either contact's token and ends the alert. Revoking a device voids its token on in-flight alerts whichever slot it holds, a push racing a revocation of the second device leaves no working token, and an acknowledged alert is never pushed again. Alert text is now kept on the record (`AlertText`) so a later tier can push it. The phone still sends only an Acknowledge. Registering and revoking the second contact (CLI and routes) follow. 150 tests; dropping either-token acceptance, or the race recheck, fails a named test.
