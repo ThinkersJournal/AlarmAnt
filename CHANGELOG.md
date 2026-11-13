@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 — added
+
+Three-channel step 1b (board 389): the second contact's app push. `second::push_second` sends the same alert text to the second recipient (`DeviceRegistry::second_device`, default none) and records their ack token on the alert (`AlertRecord::second_ack_token`, `AlertStore::set_second_ack_token`); `acknowledge` then accepts either contact's token and ends the alert. Revoking a device voids its token on in-flight alerts whichever slot it holds, a push racing a revocation of the second device leaves no working token, and an acknowledged alert is never pushed again. Alert text is now kept on the record (`AlertText`) so a later tier can push it. The phone still sends only an Acknowledge. Registering and revoking the second contact (CLI and routes) follow. 150 tests; dropping either-token acceptance, or the race recheck, fails a named test.
+
 ## 0.1.0 — **BREAKING**: escalation tiers are now second contact's app, then PC alarm
 
 Three-channel step 1a (board 389). The escalation state machine no longer texts or calls a phone number: on the fixed N-minute timer it now goes first-contact push, then `AlertChannel::second_app`, then `AlertChannel::pc_alarm`, then unresolved; an acknowledgement from anyone still ends it from any state. Removed: `Contact` (phone number), `AlertChannel::sms`/`voice`, `Stage::Sms`/`Voice` (now `SecondApp`/`PcAlarm`), `EscalationRecord::person2`, the `person2` argument of `Escalator::register`, `Alert::new`/`restore`, `EscalationConfig::new`/`with_default_minutes`, `ConfigError::Number`, and the `config` argument of `raise_escalating`. The phone still sends nothing but an acknowledgement and the timer fixes the pace (constraint 13). Adapters for the second push and the PC alarm, and the second recipient in the registry, follow in later slices. 140 tests, clippy clean.
