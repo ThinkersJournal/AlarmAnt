@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.56 — registration slice (c): POST /register with a failures-only limiter
+
+- Registration slice (c): `register` module and `POST /register` route. Bearer enrolment code plus `{"fcm_token"}`; a valid code makes the phone the device and answers `201 {"ack_token"}` once (`Cache-Control: no-store`; only the digest is kept); wrong, missing, reused and expired codes answer one fixed 401. `FailureLimiter` counts failed attempts only (5 in 60 s, then 429): the code is always checked first, so a valid code passes after any flood. A bad body is 400 before the code is spent; 413 over 16 KiB. `DeviceStore` and `MemoryDevices`. Known-bad stub (accepts anything) failed the 401 and 429 tests first; mutation check: not recording failures fails the 429 test. 10 new tests (8 unit, 2 over real HTTP). Left for later slices: audit events, PersistAnt backends, revocation.
+
 ## 0.0.55 — registration slice (b): one-time enrolment code and store
 
 - Registration slice (b): `enroll` module. `new_enrollment` makes a 128-bit code (32 hex digits, shown once) and its `Enrollment` (SHA-256 digest via `AckToken`, 10-minute expiry); `EnrollmentStore` with an atomic `consume` (right and unexpired: accepted once and removed; right but expired: removed and refused; wrong or reused: refused, and a wrong guess does not burn the real code); one pending enrolment, a new one replaces the old. `MemoryEnrollments`. Known-bad tests first (a stub that accepted anything failed 6 of 9: expired, reused, wrong, replaced, none pending, race); mutation check: `>=` to `>` at expiry fails the expiry test. No HTTP route yet (slice c).
