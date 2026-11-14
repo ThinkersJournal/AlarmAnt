@@ -39,6 +39,29 @@ pub struct Enrollment {
     pub expires_at: u64,
 }
 
+impl Enrollment {
+    /// The stored form: digest, contact and expiry. The code itself is not kept anywhere.
+    pub(crate) fn to_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "code_digest": self.code.digest_hex(),
+            "contact": match self.contact { Contact::First => "first", Contact::Second => "second" },
+            "expires_at": self.expires_at,
+        })
+    }
+
+    pub(crate) fn from_value(v: &serde_json::Value) -> Option<Enrollment> {
+        Some(Enrollment {
+            code: AckToken::from_digest_hex(v.get("code_digest")?.as_str()?)?,
+            contact: match v.get("contact")?.as_str()? {
+                "first" => Contact::First,
+                "second" => Contact::Second,
+                _ => return None,
+            },
+            expires_at: v.get("expires_at")?.as_u64()?,
+        })
+    }
+}
+
 impl fmt::Debug for Enrollment {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Enrollment")
@@ -93,6 +116,13 @@ pub fn new_enrollment_for(contact: Contact, now: u64) -> (String, Enrollment) {
 #[derive(Debug, Default)]
 pub struct MemoryEnrollments {
     pending: Mutex<[Option<Enrollment>; 2]>,
+}
+
+impl MemoryEnrollments {
+    pub(crate) fn snapshot(&self) -> Vec<Enrollment> {
+        let g = self.pending.lock().unwrap_or_else(|p| p.into_inner());
+        g.iter().flatten().cloned().collect()
+    }
 }
 
 impl EnrollmentStore for MemoryEnrollments {
