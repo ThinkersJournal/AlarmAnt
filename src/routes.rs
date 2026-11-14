@@ -79,7 +79,7 @@ pub fn system_clock() -> Clock {
 }
 
 /// The `Authorization` header as text, if present and visible ASCII.
-fn authorization(req: &Request) -> Option<&str> {
+pub(crate) fn authorization(req: &Request) -> Option<&str> {
     req.headers().get(AUTHORIZATION)?.to_str().ok()
 }
 
@@ -114,7 +114,7 @@ pub struct RaiseConfig<T> {
     pub clock: Clock,
 }
 
-fn json_response(status: u16, body: &serde_json::Value) -> Response {
+pub(crate) fn json_response(status: u16, body: &serde_json::Value) -> Response {
     let mut res = Response::new(Body::from_bytes(body.to_string()));
     *res.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     res.headers_mut()
