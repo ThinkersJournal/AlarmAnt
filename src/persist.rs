@@ -15,7 +15,7 @@
 //! look done.
 
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use persistant::blocking::Store;
 use persistant::{Config, Error, Need, Needs};
@@ -61,7 +61,7 @@ impl std::fmt::Debug for Disk {
 
 impl Disk {
     /// Opens (creating if needed) `dir`; scratch space for atomic replace is `dir/.tmp`.
-    pub fn open(dir: &Path) -> Result<Disk, PersistError> {
+    pub fn open(dir: &Path) -> Result<Arc<Disk>, PersistError> {
         let root = dir.join("data");
         let scratch = dir.join(".tmp");
         std::fs::create_dir_all(&root).map_err(|_| PersistError::Open)?;
@@ -79,7 +79,7 @@ impl Disk {
             needs,
         )
         .map_err(|_| PersistError::Open)?;
-        Ok(Disk { store })
+        Ok(Arc::new(Disk { store }))
     }
 
     fn load(&self, key: &str) -> Result<Option<Value>, PersistError> {
@@ -120,8 +120,8 @@ fn device_from(v: &Value) -> Option<Device> {
 
 /// [`DeviceStore`] on disk (`devices.json`).
 #[derive(Debug)]
-pub struct PersistedDevices<'a> {
-    disk: &'a Disk,
+pub struct PersistedDevices {
+    disk: Arc<Disk>,
     mem: MemoryDevices,
     write: Mutex<()>,
 }
@@ -130,8 +130,8 @@ const DEVICES: &str = "devices.json";
 const ALERTS: &str = "alerts.json";
 const ENROLLMENTS: &str = "enrollments.json";
 
-impl<'a> PersistedDevices<'a> {
-    pub fn open(disk: &'a Disk) -> Result<Self, PersistError> {
+impl PersistedDevices {
+    pub fn open(disk: &Arc<Disk>) -> Result<Self, PersistError> {
         let mem = MemoryDevices::default();
         if let Some(v) = disk.load(DEVICES)? {
             let slots = v
@@ -145,7 +145,7 @@ impl<'a> PersistedDevices<'a> {
             }
         }
         Ok(PersistedDevices {
-            disk,
+            disk: Arc::clone(disk),
             mem,
             write: Mutex::new(()),
         })
@@ -162,7 +162,7 @@ impl<'a> PersistedDevices<'a> {
     }
 }
 
-impl DeviceRegistry for PersistedDevices<'_> {
+impl DeviceRegistry for PersistedDevices {
     fn device(&self) -> Option<Device> {
         self.mem.device()
     }
@@ -172,7 +172,7 @@ impl DeviceRegistry for PersistedDevices<'_> {
     }
 }
 
-impl DeviceStore for PersistedDevices<'_> {
+impl DeviceStore for PersistedDevices {
     fn set_for(&self, contact: Contact, d: Device) {
         let _w = self.write.lock().unwrap_or_else(|p| p.into_inner());
         self.mem.set_for(contact, d);
@@ -257,14 +257,14 @@ fn alert_from(v: &Value) -> Option<AlertRecord> {
 
 /// [`AlertStore`] on disk (`alerts.json`).
 #[derive(Debug)]
-pub struct PersistedAlerts<'a> {
-    disk: &'a Disk,
+pub struct PersistedAlerts {
+    disk: Arc<Disk>,
     mem: MemoryStore,
     write: Mutex<()>,
 }
 
-impl<'a> PersistedAlerts<'a> {
-    pub fn open(disk: &'a Disk) -> Result<Self, PersistError> {
+impl PersistedAlerts {
+    pub fn open(disk: &Arc<Disk>) -> Result<Self, PersistError> {
         let mem = MemoryStore::default();
         if let Some(v) = disk.load(ALERTS)? {
             for r in v.as_array().ok_or(PersistError::Corrupt)? {
@@ -272,7 +272,7 @@ impl<'a> PersistedAlerts<'a> {
             }
         }
         Ok(PersistedAlerts {
-            disk,
+            disk: Arc::clone(disk),
             mem,
             write: Mutex::new(()),
         })
@@ -284,7 +284,7 @@ impl<'a> PersistedAlerts<'a> {
     }
 }
 
-impl AlertStore for PersistedAlerts<'_> {
+impl AlertStore for PersistedAlerts {
     fn insert(&self, record: AlertRecord) {
         let _w = self.write.lock().unwrap_or_else(|p| p.into_inner());
         self.mem.insert(record);
@@ -331,14 +331,14 @@ impl AlertStore for PersistedAlerts<'_> {
 
 /// [`EnrollmentStore`] on disk (`enrollments.json`).
 #[derive(Debug)]
-pub struct PersistedEnrollments<'a> {
-    disk: &'a Disk,
+pub struct PersistedEnrollments {
+    disk: Arc<Disk>,
     mem: MemoryEnrollments,
     write: Mutex<()>,
 }
 
-impl<'a> PersistedEnrollments<'a> {
-    pub fn open(disk: &'a Disk) -> Result<Self, PersistError> {
+impl PersistedEnrollments {
+    pub fn open(disk: &Arc<Disk>) -> Result<Self, PersistError> {
         let mem = MemoryEnrollments::default();
         if let Some(v) = disk.load(ENROLLMENTS)? {
             for e in v.as_array().ok_or(PersistError::Corrupt)? {
@@ -346,7 +346,7 @@ impl<'a> PersistedEnrollments<'a> {
             }
         }
         Ok(PersistedEnrollments {
-            disk,
+            disk: Arc::clone(disk),
             mem,
             write: Mutex::new(()),
         })
@@ -363,7 +363,7 @@ impl<'a> PersistedEnrollments<'a> {
     }
 }
 
-impl EnrollmentStore for PersistedEnrollments<'_> {
+impl EnrollmentStore for PersistedEnrollments {
     fn set(&self, e: Enrollment) {
         let _w = self.write.lock().unwrap_or_else(|p| p.into_inner());
         self.mem.set(e);

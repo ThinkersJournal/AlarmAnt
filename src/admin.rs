@@ -29,12 +29,14 @@ pub enum Command {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AdminError {
     Usage(&'static str),
+    /// The loopback request to the running service failed; fixed text, never the key.
+    Remote(&'static str),
 }
 
 impl AdminError {
     pub fn message(&self) -> &'static str {
         match self {
-            AdminError::Usage(m) => m,
+            AdminError::Usage(m) | AdminError::Remote(m) => m,
         }
     }
 }
