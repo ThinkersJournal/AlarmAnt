@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3 — added
+
+The server's `AlertChannel` (`channel::Dispatcher`): the second contact's app push is queued and sent by `drain_second` (via `push_second`), and the PC alarm is raised on a `PcAlarmBoard` that the PC program polls at `GET /pc/alarm` with its own bearer key (constant-time compare, fixed 401, never cached). An acknowledged alert drops off the board. In-memory only: an alert already at the PC-alarm stage is not raised again after a restart. Verified by four tests; removing the key check fails the route test.
+
 ## 0.2.2 — added
 
 Registration (g), part 2: the loopback admin endpoint and its client (PM ruling 2026-11-13). `adminapi::admin_routes` adds `POST /admin/enroll` and `POST /admin/revoke` (`{"contact":"first"|"second"}`) for a separate server bound with `bind_loopback`, which refuses any non-loopback address. The admin key (`admin_key_from_env`, `admin_key_from_file`; digest only, never argv, logs or error text) is checked first in constant time, before the body is read, so a wrong or missing key answers a fixed 401 and mutates nothing; commands run one at a time under one lock. `adminapi::send` is the client for `alarmant enroll|revoke`: it refuses a non-loopback base URL so the key cannot leave the machine, and reports failures in fixed text. `persist::Persisted*` now hold an `Arc<Disk>` so the stores can sit behind the routes. The binary that wires this follows. 167 tests; removing the key check fails two named tests, removing the loopback guard fails one.
