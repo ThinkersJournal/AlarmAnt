@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4 — added
+
+The `alarmant` binary. `alarmant serve` runs the public routes with the escalation timer wired in (`serve::public_server`: `POST /alert` starts the timer, `POST /ack/:id` ends it, plus `/register`, `PUT /device/token`, `GET /pc/alarm`), the loopback admin endpoint, persisted stores, and a 5 s timer loop (`serve::tick_once`: fire due steps, then push the second contact). `alarmant enroll|revoke --contact first|second` is the thin client to the admin endpoint. Secrets come from the environment or a key file, never argv; messages never repeat one. `EscalationStore` is now `Send` so the escalator can sit behind the routes. Verified by two end-to-end tests over real HTTP (first push, second app at N, PC alarm at 2N, either ack ends it; an acked alert never reaches the second contact) and by running the CLI's error paths. Not run live: it needs a Firebase service account (board 354).
+
 ## 0.2.3 — added
 
 The server's `AlertChannel` (`channel::Dispatcher`): the second contact's app push is queued and sent by `drain_second` (via `push_second`), and the PC alarm is raised on a `PcAlarmBoard` that the PC program polls at `GET /pc/alarm` with its own bearer key (constant-time compare, fixed 401, never cached). An acknowledged alert drops off the board. In-memory only: an alert already at the PC-alarm stage is not raised again after a restart. Verified by four tests; removing the key check fails the route test.
