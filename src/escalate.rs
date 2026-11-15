@@ -26,7 +26,7 @@ pub struct EscalationRecord {
 /// Durable escalation state (a PersistAnt-backed implementation comes with the
 /// service). Write-through: the [`Escalator`] saves on every change and
 /// removes a record when the alert is acknowledged.
-pub trait EscalationStore {
+pub trait EscalationStore: Send {
     fn save(&self, record: EscalationRecord);
     fn remove(&self, alert_id: &str);
     fn load_all(&self) -> Vec<EscalationRecord>;
@@ -56,7 +56,7 @@ impl EscalationStore for MemoryEscalationStore {
     }
 }
 
-impl<S: EscalationStore + ?Sized> EscalationStore for std::sync::Arc<S> {
+impl<S: EscalationStore + Sync + ?Sized> EscalationStore for std::sync::Arc<S> {
     fn save(&self, record: EscalationRecord) {
         (**self).save(record)
     }

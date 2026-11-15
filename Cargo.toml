@@ -16,7 +16,7 @@ httpant-server = "0.7.5"
 persistant = "0.17.12"
 ring = "0.17.14"
 serde_json = "1"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time"] }
 
 [dev-dependencies]
 tempfile = "3.27.0"
-tokio = { version = "1.54.1", features = ["rt", "macros"] }
