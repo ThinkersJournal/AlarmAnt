@@ -14,6 +14,7 @@ pub mod channel;
 pub mod enroll;
 pub mod escalate;
 pub mod fcm;
+pub mod pcclient;
 pub mod persist;
 pub mod push;
 pub mod raise;
