@@ -1,3 +1,5 @@
 kind: Android registration step
 ---
 The Setup screen shows "Registered with sender" and, until it is OK, a field for the enrolment link (`alarmant://enroll?u=..&c=..`) and a Register button that calls `POST /register` with the code as bearer and stores the base URL and ack token (registration slice h). Link parsing, the registered check and the answer handling are unit-tested (`RegistrationTest`); secrets are never logged and failures show fixed text. The phone reports nothing but its own register call (PATENT-SWEEP constraint 13). Not yet built or run: no JDK on this box, so CI is the check. Not in this slice: `PUT /device/token` on FCM rotation.
+
+The README status line is rewritten to match what is built and what is unverified (claim evidence for the portfolio PM, 2026-11-16).
