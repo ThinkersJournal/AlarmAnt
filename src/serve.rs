@@ -11,7 +11,7 @@ use httpant_server::Server;
 use httpant_server::core::http::StatusCode;
 use httpant_server::core::{IntoResponse, PathParams, Request, Response};
 
-use crate::ack::{AckToken, AlertStore};
+use crate::ack::{AckToken, AlertStore, bearer_token};
 use crate::channel::{Dispatcher, PcAlarmBoard, PcAlarmConfig, drain_second, pc_alarm_route};
 use crate::enroll::EnrollmentStore;
 use crate::escalate::Escalator;
@@ -89,6 +89,7 @@ where
         },
     );
     let server = device_token_route(server, devices);
+    let server = pc_ack_route(server, app);
     pc_alarm_route(
         server,
         PcAlarmConfig {
@@ -179,6 +180,54 @@ fn ack_route<T, D>(server: Server, app: &App<T, D>) -> Server {
             );
             let status = StatusCode::from_u16(outcome.status()).unwrap_or(StatusCode::NOT_FOUND);
             let res: Response = status.into_response();
+            res
+        }
+    })
+}
+
+/// Adds `POST /pc/ack/:alert_id`: the PC program's Acknowledge (its one outgoing message,
+/// constraint 18). `Authorization: Bearer <PC key>`; accepted only for an alert whose PC alarm is
+/// sounding, so the PC key cannot touch any other alert. Ends the alert for everyone, like any
+/// acknowledgement. 401 for a bad key, 404 for any alert that is not at the PC step.
+fn pc_ack_route<T, D>(server: Server, app: &App<T, D>) -> Server {
+    let (key, alerts, board, escalator, dispatcher, clock) = (
+        Arc::new(app.pc_key.clone()),
+        Arc::clone(&app.alerts),
+        Arc::clone(&app.board),
+        Arc::clone(&app.escalator),
+        Arc::clone(&app.dispatcher),
+        Arc::clone(&app.clock),
+    );
+    server.post("/pc/ack/:alert_id", move |req: Request| {
+        let (key, alerts, board, escalator, dispatcher, clock) = (
+            Arc::clone(&key),
+            Arc::clone(&alerts),
+            Arc::clone(&board),
+            Arc::clone(&escalator),
+            Arc::clone(&dispatcher),
+            Arc::clone(&clock),
+        );
+        async move {
+            let ok = authorization(&req)
+                .and_then(bearer_token)
+                .is_some_and(|k| key.matches(k));
+            if !ok {
+                return StatusCode::UNAUTHORIZED.into_response();
+            }
+            let id = req
+                .extensions()
+                .get::<PathParams>()
+                .and_then(|p| p.get("alert_id"))
+                .map(str::to_owned);
+            let Some(id) = id.filter(|id| board.active(&*alerts).contains(id)) else {
+                return StatusCode::NOT_FOUND.into_response();
+            };
+            alerts.mark_acked(&id, clock());
+            escalator
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .ack(&id, &*dispatcher);
+            let res: Response = StatusCode::OK.into_response();
             res
         }
     })
@@ -353,5 +402,42 @@ mod tests {
         now.store(2000, Ordering::SeqCst);
         assert!(tick_once(&app, 2000).await.is_empty());
         assert_eq!(app.transport.0.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn the_pc_key_acks_only_an_alert_at_the_pc_step() {
+        let now = Arc::new(AtomicU64::new(1000));
+        let app = app(Arc::clone(&now));
+        let srv = public_server(&app).bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", srv.addr());
+        let (_, v) = call(
+            &base,
+            "POST",
+            "/alert",
+            &format!("Bearer {KEY}"),
+            r#"{"title":"t","body":"b"}"#,
+        )
+        .await;
+        let id = v["alert_id"].as_str().unwrap().to_owned();
+        let path = format!("/pc/ack/{id}");
+        let pc = "Bearer pc-key-0123456789";
+        // Not at the PC step yet: refused, and the alert stays open.
+        assert_eq!(call(&base, "POST", &path, pc, "").await.0, 404);
+        for t in [1060, 1120] {
+            now.store(t, Ordering::SeqCst);
+            tick_once(&app, t).await;
+        }
+        assert_eq!(call(&base, "POST", &path, "Bearer wrong", "").await.0, 401);
+        assert_eq!(call(&base, "POST", &path, "", "").await.0, 401);
+        let (_, v) = call(&base, "GET", "/pc/alarm", pc, "").await;
+        assert_eq!(v["alert_ids"][0], id.as_str(), "bad keys changed nothing");
+        assert_eq!(call(&base, "POST", &path, pc, "").await.0, 200);
+        let (_, v) = call(&base, "GET", "/pc/alarm", pc, "").await;
+        assert!(v["alert_ids"].as_array().unwrap().is_empty());
+        assert_eq!(
+            app.alerts.get(&id).unwrap().state,
+            crate::AlertState::Acked
+        );
+        assert!(app.escalator.lock().unwrap().state(&id).is_none());
     }
 }
