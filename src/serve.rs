@@ -434,10 +434,7 @@ mod tests {
         assert_eq!(call(&base, "POST", &path, pc, "").await.0, 200);
         let (_, v) = call(&base, "GET", "/pc/alarm", pc, "").await;
         assert!(v["alert_ids"].as_array().unwrap().is_empty());
-        assert_eq!(
-            app.alerts.get(&id).unwrap().state,
-            crate::AlertState::Acked
-        );
+        assert_eq!(app.alerts.get(&id).unwrap().state, crate::AlertState::Acked);
         assert!(app.escalator.lock().unwrap().state(&id).is_none());
     }
 }
