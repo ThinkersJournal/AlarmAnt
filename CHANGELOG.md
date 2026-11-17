@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.8 — changed
+
+HANDOFF.md rewritten to the current state: server chain, admin endpoint, binary and PC alarm are on main; what is in flight (#66, the A8 signing WIP branch), what is next (Android registration step), and the known gaps. Documentation only.
+
+## 0.2.7 — Android registration step
+
+The Setup screen shows "Registered with sender" and, until it is OK, a field for the enrolment link (`alarmant://enroll?u=..&c=..`) and a Register button that calls `POST /register` with the code as bearer and stores the base URL and ack token (registration slice h). Link parsing, the registered check and the answer handling are unit-tested (`RegistrationTest`); secrets are never logged and failures show fixed text. The phone reports nothing but its own register call (PATENT-SWEEP constraint 13). Not yet built or run: no JDK on this box, so CI is the check. Not in this slice: `PUT /device/token` on FCM rotation.
+
+The README status line is rewritten to match what is built and what is unverified (claim evidence for the portfolio PM, 2026-11-16).
+
 ## 0.2.6 — changed
 
 CI: the shared portfolio workflow moves to coderipper c72a6e03 (CodeRipper 0.47.5). No rule names to migrate: the repository has no `.coderipper.toml` and names no rule in any file (the migration tool exits 2 on the missing config; a grep for the 14 old names finds none). Verified by reading the Portfolio job of this PR.
