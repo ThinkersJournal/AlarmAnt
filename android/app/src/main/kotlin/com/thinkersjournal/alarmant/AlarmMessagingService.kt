@@ -5,6 +5,11 @@ import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import androidx.core.content.edit
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 
 /**
  * Receives the A2 data push (priority HIGH, data only). Nothing in the message text is parsed:
@@ -26,7 +31,16 @@ class AlarmMessagingService : FirebaseMessagingService() {
     // firebase-messaging 26.0.1 marks this deprecated without naming a replacement in the class.
     @Suppress("OVERRIDE_DEPRECATION")
     override fun onNewToken(token: String) {
-        // Device registration with the sender is not designed yet (DESIGN-A2 open question: ack auth).
         getSharedPreferences("config", MODE_PRIVATE).edit { putString("fcm_token", token) }
+        // Once registered, tell the sender the new token (DESIGN-REGISTRATION section 4); latest token wins.
+        if (Registration.isRegistered(this)) {
+            WorkManager.getInstance(this).enqueueUniqueWork(
+                "fcm-token",
+                ExistingWorkPolicy.REPLACE,
+                OneTimeWorkRequestBuilder<TokenWorker>()
+                    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                    .build(),
+            )
+        }
     }
 }
