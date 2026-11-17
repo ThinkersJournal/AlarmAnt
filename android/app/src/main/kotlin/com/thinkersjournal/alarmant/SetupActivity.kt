@@ -10,6 +10,8 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Button
+import android.widget.EditText
+import android.widget.Toast
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -45,6 +47,38 @@ class SetupActivity : ComponentActivity() {
             text = "WARNING: " + TotalSilence.WARNING
             textSize = 20f
         })
+        val registered = Registration.isRegistered(this)
+        step("Registered with sender", registered) {}
+        if (!registered) {
+            val field = EditText(this).apply { hint = "Paste the enrolment link (alarmant://enroll?...)" }
+            column.addView(field)
+            column.addView(Button(this).apply {
+                text = "Register"
+                setOnClickListener {
+                    val enrolment = Registration.parseLink(field.text.toString())
+                    if (enrolment == null) {
+                        Toast.makeText(this@SetupActivity, "Not an enrolment link", Toast.LENGTH_LONG).show()
+                    } else {
+                        isEnabled = false
+                        Thread {
+                            val result = Registration.register(this@SetupActivity, enrolment)
+                            runOnUiThread {
+                                Toast.makeText(
+                                    this@SetupActivity,
+                                    when (result) {
+                                        Registration.Outcome.DONE -> "Registered"
+                                        Registration.Outcome.REJECTED -> "Code not accepted"
+                                        Registration.Outcome.RETRY_LATER -> "Could not reach the sender; try again"
+                                    },
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                                onResume()
+                            }
+                        }.start()
+                    }
+                }
+            })
+        }
         step("Notifications", Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED) {
