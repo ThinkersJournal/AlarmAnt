@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.6 — changed
+
+CI: the shared portfolio workflow moves to coderipper c72a6e03 (CodeRipper 0.47.5). No rule names to migrate: the repository has no `.coderipper.toml` and names no rule in any file (the migration tool exits 2 on the missing config; a grep for the 14 old names finds none). Verified by reading the Portfolio job of this PR.
+
 ## 0.2.5 — added
 
 The PC alarm program, `alarmant-pc` (Windows, in the operator's logged-in session): it polls `GET /pc/alarm` every 5 s; while an alert is at the PC step it unmutes the default speakers, sets master volume to maximum through Core Audio (re-asserted on each poll), loops a two-tone siren, and shows a topmost Stop dialog whose OK acknowledges the alert (`POST /pc/ack/:id`, PC key, accepted only for an alert at the PC step; it ends the alert for everyone). The portable logic is `pcclient` (`PcClient`, `Watcher`, the `Siren` trait). It only asks and only ever sends that Acknowledge: no status of any kind goes to the server, a failed poll changes nothing (a sounding siren keeps sounding), the key goes only to https or this machine, and `Debug` never shows it (constraints 13, 17 to 22). Verified by tests of the watcher, the key guard, polling and refusal against the real route, the server ack route (refused before the PC step, 401 changes nothing, 200 ends the alert) and the siren WAV. Not run live: starting it changes the machine's volume and plays a siren. Limits: needs the PC on, the user logged in, the program running and a playback device; cannot wake a sleeping PC; headphones or a muted external amp still make it inaudible.
