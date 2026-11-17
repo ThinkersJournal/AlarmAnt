@@ -19,4 +19,4 @@ NEXT, in order:
 
 Tools: `C:\Projects\tools\patent-claims.py <numbers>`; emulator AVD `alarm36` in `C:\Users\cires\lane-tools\alarmant`. Windows: `bash tools/...` is not available, use `python tools/check-fragment.py origin/main`.
 
-WAIT: #68 merged by the PM gate | check: gh pr view 68 --repo ThinkersJournal/AlarmAnt --json state --jq .state | wake: 2026-11-17T15:00:00Z
+WAIT: #68 merged by the PM gate | check: gh pr view 68 --repo ThinkersJournal/AlarmAnt --json state --jq .state | wake: 2026-11-17T22:51:00Z
