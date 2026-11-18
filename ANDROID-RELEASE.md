@@ -28,5 +28,13 @@ artifact `alarmant-release-apk`. It publishes nothing outward.
 3. Keep the keystore and its passwords somewhere that is not this repository; losing the key means a
    new key and a reinstall.
 
+## Verifying a release end to end
+
+Key material is supplied only through `with-secret` (names only here; no value is in a file, argv, log or this repository).
+1. The run for the tag is green, and its `Check the APK is signed` step passed (`apksigner verify` on the one APK; an `unsigned` name fails it).
+2. Download `alarmant-release-apk`; run `apksigner verify --print-certs` on it and compare the certificate SHA-256 with the one recorded for the upload key (kept with the keystore, not here).
+3. Install it on the phone, finish Setup (every row OK, including Registered with sender), and let the daily self-test (A6) raise an alert; Acknowledge it. That is the proof the release build receives a push and acknowledges.
+4. A tag push from a fork or without the secrets fails at the first step with a named missing secret, never with a silently unsigned APK.
+
 Status: written without a JDK on the authoring box and not yet run. The first tag push is the test;
 until then the signing path is unverified (the PR build checks only that the unsigned build still works).
