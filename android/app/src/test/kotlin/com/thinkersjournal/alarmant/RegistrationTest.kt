@@ -52,3 +52,22 @@ class RegistrationTest {
         assertEquals(Registration.Outcome.RETRY_LATER, Registration.outcome(500))
     }
 }
+
+class TokenUpdateTest {
+    @Test
+    fun answersMapToDoneStopOrRetry() {
+        assertEquals(Registration.Outcome.DONE, Registration.tokenOutcome(200))
+        assertEquals(Registration.Outcome.REJECTED, Registration.tokenOutcome(401))
+        assertEquals(Registration.Outcome.RETRY_LATER, Registration.tokenOutcome(500))
+        assertEquals(Registration.Outcome.RETRY_LATER, Registration.tokenOutcome(429))
+        // 201 is the register answer, not this one.
+        assertEquals(Registration.Outcome.RETRY_LATER, Registration.tokenOutcome(201))
+    }
+
+    @Test
+    fun updatesAreOnlyAttemptedWhenRegistered() {
+        assertTrue(Registration.shouldUpdate("http://h", "tok"))
+        assertFalse(Registration.shouldUpdate(null, "tok"))
+        assertFalse(Registration.shouldUpdate("http://h", null))
+    }
+}

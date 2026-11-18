@@ -55,6 +55,44 @@ object Registration {
         else -> Outcome.RETRY_LATER
     }
 
+    /** `PUT /device/token` answers 200; 401 means the sender no longer knows this phone (stop, keep everything local). */
+    fun tokenOutcome(code: Int): Outcome = when (code) {
+        200 -> Outcome.DONE
+        401 -> Outcome.REJECTED
+        else -> Outcome.RETRY_LATER
+    }
+
+    fun shouldUpdate(baseUrl: String?, token: String?) = isRegistered(baseUrl, token)
+
+    /**
+     * After Firebase rotates the push token: `PUT /device/token` with the ack token as bearer (DESIGN-REGISTRATION
+     * section 4). Blocking: run off the main thread. A rejection changes nothing on the phone (no self-invalidation).
+     */
+    fun updateToken(context: Context): Outcome {
+        val config = context.getSharedPreferences("config", Context.MODE_PRIVATE)
+        val base = config.getString("ack_base_url", null)
+        val ack = config.getString("device_token", null)
+        val fcm = config.getString("fcm_token", null)
+        if (!shouldUpdate(base, ack) || fcm.isNullOrEmpty()) return Outcome.RETRY_LATER
+        return try {
+            val conn = URL("$base/device/token").openConnection() as HttpURLConnection
+            try {
+                conn.requestMethod = "PUT"
+                conn.setRequestProperty("Authorization", "Bearer $ack")
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.doOutput = true
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 10_000
+                conn.outputStream.use { it.write(JSONObject().put("fcm_token", fcm).toString().toByteArray()) }
+                tokenOutcome(conn.responseCode)
+            } finally {
+                conn.disconnect()
+            }
+        } catch (_: IOException) {
+            Outcome.RETRY_LATER
+        }
+    }
+
     /** Blocking network call: run off the main thread. Stores the base URL and ack token on success. */
     fun register(context: Context, enrolment: Enrolment): Outcome {
         val config = context.getSharedPreferences("config", Context.MODE_PRIVATE)
