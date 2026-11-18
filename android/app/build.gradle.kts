@@ -16,9 +16,26 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Release signing reads the keystore from the environment so no secret is ever in the repo
+    // (ANDROID-RELEASE.md). With the variables unset, `assembleRelease` builds an unsigned APK.
+    val releaseKeystore: String? = System.getenv("ALARMANT_KEYSTORE_FILE")
+    if (releaseKeystore != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("ALARMANT_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ALARMANT_KEY_ALIAS")
+                keyPassword = System.getenv("ALARMANT_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (releaseKeystore != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
