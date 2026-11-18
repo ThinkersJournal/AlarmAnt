@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.10 — Android release signing and release workflow
+
+`assembleRelease` signs from `ALARMANT_KEYSTORE_*` environment variables when set (unsigned otherwise), and `.github/workflows/android-release.yml` builds and verifies a signed APK only on a pushed `android-v*` tag, keeping it as a workflow artifact. `ANDROID-RELEASE.md` lists the secrets and steps. Unverified: nothing has been run with a real keystore; the PR build proves only that the unsigned build still works.
+
 ## 0.2.9 — Android pushes a rotated FCM token to the sender
 
 When Firebase rotates the push token and the phone is registered, a WorkManager job calls `PUT /device/token` with the ack token as bearer (registration slice h, part 2; the server route already existed). Answer mapping and the registered check are unit-tested (`TokenUpdateTest`). A 401 stops quietly and changes nothing on the phone (no self-invalidation); nothing is reported beyond the phone's own call. Unbuilt locally (no JDK): CI is the check. Stacked on #68.
