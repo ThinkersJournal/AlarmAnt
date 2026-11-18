@@ -2,7 +2,7 @@
 //!
 //! [`raise_escalating`] is [`crate::raise::raise_alert`] plus starting the escalation timer;
 //! [`acknowledge_escalating`] is [`crate::ack::acknowledge`] plus cancelling it. No provider is
-//! wired here: the SMS/voice [`AlertChannel`] is passed in, and the phone's only input is still
+//! wired here: the second-app/PC-alarm [`AlertChannel`] is passed in, and the phone's only input is still
 //! the acknowledgement.
 //!
 //! Ordering matters. An acknowledgement can race the raise response, so the raise path checks the
@@ -17,66 +17,51 @@ use crate::ack::{AckOutcome, AckToken, AlertStore, acknowledge};
 use crate::escalate::{DEFAULT_MINUTES, Escalator};
 use crate::fcm::PushTransport;
 use crate::raise::{DeviceRegistry, RaiseError, raise_alert};
-use crate::{AlertChannel, AlertState, Contact, Outcome};
+use crate::{AlertChannel, AlertState, Outcome};
 
 /// Longest wait the single setting accepts, in minutes.
 pub const MAX_MINUTES: u64 = 120;
 
-/// Why escalation settings were refused. Never carries the number.
+/// Why escalation settings were refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigError {
     /// `minutes` outside `1..=MAX_MINUTES`.
     Minutes,
-    /// Person 2's number is not `+` followed by 8 to 15 digits.
-    Number,
 }
 
 impl fmt::Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ConfigError::Minutes => write!(f, "minutes must be 1 to {MAX_MINUTES}"),
-            ConfigError::Number => f.write_str("person 2 must be + and 8 to 15 digits"),
         }
     }
 }
 
 impl std::error::Error for ConfigError {}
 
-/// The escalation settings: one number `N` and person 2. Nothing else is configurable
+/// The escalation settings: one number `N`. Nothing else is configurable
 /// (DESIGN-A5: no schedules, no battery gate, no per-step timers).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EscalationConfig {
     minutes: u64,
-    person2: Contact,
 }
 
 impl EscalationConfig {
-    /// `minutes` of 1 to 120; `person2` as `+` and 8 to 15 digits (E.164 shape).
-    pub fn new(minutes: u64, person2: &str) -> Result<Self, ConfigError> {
+    /// `minutes` of 1 to 120.
+    pub fn new(minutes: u64) -> Result<Self, ConfigError> {
         if !(1..=MAX_MINUTES).contains(&minutes) {
             return Err(ConfigError::Minutes);
         }
-        let digits = person2.strip_prefix('+').ok_or(ConfigError::Number)?;
-        if !(8..=15).contains(&digits.len()) || !digits.bytes().all(|b| b.is_ascii_digit()) {
-            return Err(ConfigError::Number);
-        }
-        Ok(EscalationConfig {
-            minutes,
-            person2: Contact::new(person2),
-        })
+        Ok(EscalationConfig { minutes })
     }
 
     /// Same, with the default `N` (5 minutes).
-    pub fn with_default_minutes(person2: &str) -> Result<Self, ConfigError> {
-        Self::new(DEFAULT_MINUTES, person2)
+    pub fn with_default_minutes() -> Result<Self, ConfigError> {
+        Self::new(DEFAULT_MINUTES)
     }
 
     pub fn minutes(&self) -> u64 {
         self.minutes
-    }
-
-    pub fn person2(&self) -> &Contact {
-        &self.person2
     }
 }
 
@@ -88,7 +73,6 @@ fn lock(e: &Mutex<Escalator>) -> std::sync::MutexGuard<'_, Escalator> {
 /// already acknowledged.
 #[allow(clippy::too_many_arguments)]
 pub async fn raise_escalating(
-    config: &EscalationConfig,
     escalator: &Mutex<Escalator>,
     api_key: &AckToken,
     authorization: Option<&str>,
@@ -102,7 +86,7 @@ pub async fn raise_escalating(
     let mut e = lock(escalator);
     let acked = store.get(&id).is_some_and(|r| r.state == AlertState::Acked);
     if !acked {
-        e.register(&id, config.person2().clone(), now);
+        e.register(&id, now);
     }
     Ok(id)
 }
@@ -188,12 +172,12 @@ mod tests {
     #[derive(Default)]
     struct Chan(Mutex<Vec<&'static str>>);
     impl AlertChannel for Chan {
-        fn sms(&self, _: &Contact, _: &str) -> Result<(), crate::ChannelError> {
-            self.0.lock().unwrap().push("sms");
+        fn second_app(&self, _: &str) -> Result<(), crate::ChannelError> {
+            self.0.lock().unwrap().push("second_app");
             Ok(())
         }
-        fn voice(&self, _: &Contact, _: &str) -> Result<(), crate::ChannelError> {
-            self.0.lock().unwrap().push("voice");
+        fn pc_alarm(&self, _: &str) -> Result<(), crate::ChannelError> {
+            self.0.lock().unwrap().push("pc_alarm");
             Ok(())
         }
     }
@@ -202,17 +186,12 @@ mod tests {
     const KEY: Option<&str> = Some("Bearer key");
     const ACK: Option<&str> = Some("Bearer ack-tok");
 
-    fn cfg() -> EscalationConfig {
-        EscalationConfig::new(5, "+15550100123").unwrap()
-    }
-
     fn raise(
         e: &Mutex<Escalator>,
         t: &impl PushTransport,
         s: &MemoryStore,
     ) -> Result<String, RaiseError> {
         block_on(raise_escalating(
-            &cfg(),
             e,
             &AckToken::new("key"),
             KEY,
@@ -238,7 +217,7 @@ mod tests {
         assert_eq!(lock(&e).state(&id), Some(AlertState::Sent));
         assert_eq!(lock(&e).next_due(), Some(400));
         lock(&e).tick(400, &ch);
-        assert_eq!(*ch.0.lock().unwrap(), vec!["sms"]);
+        assert_eq!(*ch.0.lock().unwrap(), vec!["second_app"]);
     }
 
     #[test]
@@ -248,7 +227,6 @@ mod tests {
         assert_eq!(lock(&e).next_due(), None);
         let (e, s) = (escalator(), MemoryStore::default());
         let r = block_on(raise_escalating(
-            &cfg(),
             &e,
             &AckToken::new("key"),
             Some("Bearer wrong"),
@@ -314,32 +292,13 @@ mod tests {
     }
 
     #[test]
-    fn config_validation_and_no_number_in_output() {
+    fn config_accepts_one_to_120_minutes_and_defaults_to_5() {
+        assert_eq!(EscalationConfig::new(0), Err(ConfigError::Minutes));
+        assert_eq!(EscalationConfig::new(121), Err(ConfigError::Minutes));
+        assert_eq!(EscalationConfig::new(120).unwrap().minutes(), 120);
         assert_eq!(
-            EscalationConfig::new(0, "+15550100123"),
-            Err(ConfigError::Minutes)
+            EscalationConfig::with_default_minutes().unwrap().minutes(),
+            5
         );
-        assert_eq!(
-            EscalationConfig::new(121, "+15550100123"),
-            Err(ConfigError::Minutes)
-        );
-        for bad in [
-            "",
-            "15550100123",
-            "+1555",
-            "+1555010012345678",
-            "+1555abc0100",
-            "+ 5550100123",
-        ] {
-            assert_eq!(
-                EscalationConfig::new(5, bad),
-                Err(ConfigError::Number),
-                "{bad:?}"
-            );
-        }
-        let c = EscalationConfig::with_default_minutes("+15550100123").unwrap();
-        assert_eq!(c.minutes(), 5);
-        let shown = format!("{c:?} {}", ConfigError::Number);
-        assert!(!shown.contains("5550100123"));
     }
 }

@@ -1,5 +1,79 @@
 # Changelog
 
+## 0.2.9 — Android pushes a rotated FCM token to the sender
+
+When Firebase rotates the push token and the phone is registered, a WorkManager job calls `PUT /device/token` with the ack token as bearer (registration slice h, part 2; the server route already existed). Answer mapping and the registered check are unit-tested (`TokenUpdateTest`). A 401 stops quietly and changes nothing on the phone (no self-invalidation); nothing is reported beyond the phone's own call. Unbuilt locally (no JDK): CI is the check. Stacked on #68.
+
+## 0.2.8 — changed
+
+HANDOFF.md rewritten to the current state: server chain, admin endpoint, binary and PC alarm are on main; what is in flight (#66, the A8 signing WIP branch), what is next (Android registration step), and the known gaps. Documentation only.
+
+## 0.2.7 — Android registration step
+
+The Setup screen shows "Registered with sender" and, until it is OK, a field for the enrolment link (`alarmant://enroll?u=..&c=..`) and a Register button that calls `POST /register` with the code as bearer and stores the base URL and ack token (registration slice h). Link parsing, the registered check and the answer handling are unit-tested (`RegistrationTest`); secrets are never logged and failures show fixed text. The phone reports nothing but its own register call (PATENT-SWEEP constraint 13). Not yet built or run: no JDK on this box, so CI is the check. Not in this slice: `PUT /device/token` on FCM rotation.
+
+The README status line is rewritten to match what is built and what is unverified (claim evidence for the portfolio PM, 2026-11-16).
+
+## 0.2.6 — changed
+
+CI: the shared portfolio workflow moves to coderipper c72a6e03 (CodeRipper 0.47.5). No rule names to migrate: the repository has no `.coderipper.toml` and names no rule in any file (the migration tool exits 2 on the missing config; a grep for the 14 old names finds none). Verified by reading the Portfolio job of this PR.
+
+## 0.2.5 — added
+
+The PC alarm program, `alarmant-pc` (Windows, in the operator's logged-in session): it polls `GET /pc/alarm` every 5 s; while an alert is at the PC step it unmutes the default speakers, sets master volume to maximum through Core Audio (re-asserted on each poll), loops a two-tone siren, and shows a topmost Stop dialog whose OK acknowledges the alert (`POST /pc/ack/:id`, PC key, accepted only for an alert at the PC step; it ends the alert for everyone). The portable logic is `pcclient` (`PcClient`, `Watcher`, the `Siren` trait). It only asks and only ever sends that Acknowledge: no status of any kind goes to the server, a failed poll changes nothing (a sounding siren keeps sounding), the key goes only to https or this machine, and `Debug` never shows it (constraints 13, 17 to 22). Verified by tests of the watcher, the key guard, polling and refusal against the real route, the server ack route (refused before the PC step, 401 changes nothing, 200 ends the alert) and the siren WAV. Not run live: starting it changes the machine's volume and plays a siren. Limits: needs the PC on, the user logged in, the program running and a playback device; cannot wake a sleeping PC; headphones or a muted external amp still make it inaudible.
+
+## 0.2.4 — added
+
+The `alarmant` binary. `alarmant serve` runs the public routes with the escalation timer wired in (`serve::public_server`: `POST /alert` starts the timer, `POST /ack/:id` ends it, plus `/register`, `PUT /device/token`, `GET /pc/alarm`), the loopback admin endpoint, persisted stores, and a 5 s timer loop (`serve::tick_once`: fire due steps, then push the second contact). `alarmant enroll|revoke --contact first|second` is the thin client to the admin endpoint. Secrets come from the environment or a key file, never argv; messages never repeat one. `EscalationStore` is now `Send` so the escalator can sit behind the routes. Verified by two end-to-end tests over real HTTP (first push, second app at N, PC alarm at 2N, either ack ends it; an acked alert never reaches the second contact) and by running the CLI's error paths. Not run live: it needs a Firebase service account (board 354).
+
+## 0.2.3 — added
+
+The server's `AlertChannel` (`channel::Dispatcher`): the second contact's app push is queued and sent by `drain_second` (via `push_second`), and the PC alarm is raised on a `PcAlarmBoard` that the PC program polls at `GET /pc/alarm` with its own bearer key (constant-time compare, fixed 401, never cached). An acknowledged alert drops off the board. In-memory only: an alert already at the PC-alarm stage is not raised again after a restart. Verified by four tests; removing the key check fails the route test.
+
+## 0.2.2 — added
+
+Registration (g), part 2: the loopback admin endpoint and its client (PM ruling 2026-11-13). `adminapi::admin_routes` adds `POST /admin/enroll` and `POST /admin/revoke` (`{"contact":"first"|"second"}`) for a separate server bound with `bind_loopback`, which refuses any non-loopback address. The admin key (`admin_key_from_env`, `admin_key_from_file`; digest only, never argv, logs or error text) is checked first in constant time, before the body is read, so a wrong or missing key answers a fixed 401 and mutates nothing; commands run one at a time under one lock. `adminapi::send` is the client for `alarmant enroll|revoke`: it refuses a non-loopback base URL so the key cannot leave the machine, and reports failures in fixed text. `persist::Persisted*` now hold an `Arc<Disk>` so the stores can sit behind the routes. The binary that wires this follows. 167 tests; removing the key check fails two named tests, removing the loopback guard fails one.
+
+## 0.2.1 — added
+
+Registration (g), part 1: the stores on disk through PersistAnt (`persistant` 0.17). `persist::Disk` opens a data directory (one JSON file per store, replaced atomically); `PersistedDevices`, `PersistedAlerts` and `PersistedEnrollments` are the in-memory stores with write-through snapshots, loaded once at open, so devices, alerts (with both ack digests and the alert text) and pending codes survive a restart, and a revocation stays a revocation. On disk, ack tokens and enrolment codes are SHA-256 digests only; the FCM push token is in clear (needed to send), so the data directory must be readable by the service account only until SecretAnt. A corrupt file is refused and left untouched; a write that fails stops the service with fixed text rather than let a restart undo a change. The server binary and the loopback admin endpoint for `enroll`/`revoke` (PM ruling 2026-11-13, in ROADMAP.md) follow. 161 tests; skipping the save in `take_for` fails `a_revocation_is_still_a_revocation_after_a_restart`.
+
+## 0.2.0 — **BREAKING**: `EnrollmentStore::consume` now answers the contact; `DeviceStore` is keyed by contact
+
+Three-channel step 1c (board 389): the second contact can be enrolled, registered and revoked. `enroll::Contact` (First, Second) replaces `admin::Contact` (still re-exported); an `Enrollment` names its contact, the store holds one pending code per contact (a new code for one leaves the other's alone), and `EnrollmentStore::consume` returns the contact the code was for. `DeviceStore` gains `set_for`/`take_for` (`set`/`take` are the first contact's), `MemoryDevices` holds both slots, `POST /register` stores the device in the slot its code was made for, and `PUT /device/token` rotates the push token for whichever contact's ack token is presented. `revoke::revoke_contact` and `alarmant enroll|revoke --contact second` now run (the refusal and `AdminError::Unavailable` are gone); revoking one contact deletes only that device and voids only its tokens. Nothing new is reported to a phone. 154 tests; limiting the token-rotation check to the first slot fails a named test.
+
+## 0.1.1 — added
+
+Three-channel step 1b (board 389): the second contact's app push. `second::push_second` sends the same alert text to the second recipient (`DeviceRegistry::second_device`, default none) and records their ack token on the alert (`AlertRecord::second_ack_token`, `AlertStore::set_second_ack_token`); `acknowledge` then accepts either contact's token and ends the alert. Revoking a device voids its token on in-flight alerts whichever slot it holds, a push racing a revocation of the second device leaves no working token, and an acknowledged alert is never pushed again. Alert text is now kept on the record (`AlertText`) so a later tier can push it. The phone still sends only an Acknowledge. Registering and revoking the second contact (CLI and routes) follow. 150 tests; dropping either-token acceptance, or the race recheck, fails a named test.
+
+## 0.1.0 — **BREAKING**: escalation tiers are now second contact's app, then PC alarm
+
+Three-channel step 1a (board 389). The escalation state machine no longer texts or calls a phone number: on the fixed N-minute timer it now goes first-contact push, then `AlertChannel::second_app`, then `AlertChannel::pc_alarm`, then unresolved; an acknowledgement from anyone still ends it from any state. Removed: `Contact` (phone number), `AlertChannel::sms`/`voice`, `Stage::Sms`/`Voice` (now `SecondApp`/`PcAlarm`), `EscalationRecord::person2`, the `person2` argument of `Escalator::register`, `Alert::new`/`restore`, `EscalationConfig::new`/`with_default_minutes`, `ConfigError::Number`, and the `config` argument of `raise_escalating`. The phone still sends nothing but an acknowledgement and the timer fixes the pace (constraint 13). Adapters for the second push and the PC alarm, and the second recipient in the registry, follow in later slices. 140 tests, clippy clean.
+
+## 0.0.60 — added
+
+Registration (f): operator commands. `alarmant enroll --contact first|second` makes the one-time enrolment code and shows it once; `alarmant revoke --contact first|second` deletes the device and voids its in-flight ack tokens. `--contact` is required and never guessed; there is no command that undoes a revocation. This slice is the command logic (`admin::parse`, `admin::run`); the binary and PersistAnt stores come with slice (g). Only `first` runs until the registry holds two recipients; `second` is refused with a plain message and changes nothing.
+
+## 0.0.61 — docs: HANDOFF rewrite
+
+- HANDOFF rewritten for the current state: board 389 ruled, registration stack, three-channel build order, A8 signing draft, phone-session readiness.
+
+## 0.0.59 — registration slice (e): revoke
+
+- Registration slice (e): `revoke` module. `revoke(devices, alerts)` deletes the device record (`DeviceStore::take`) and voids the ack token of every alert still in flight (`AlertStore::void_ack_tokens`, token becomes `AckToken::void`, an all-zero digest nothing can match), so a lost phone cannot stand down an alert; those alerts escalate on their normal timer. Acknowledged alerts, other devices' alerts and a second revoke are untouched or harmless; afterwards `POST /alert` answers 409 (no device) and the old token cannot rotate a push token. A raise racing a revocation rechecks the registry after storing its record and voids it too. Patent rules kept: server-side record delete only, no restore or re-validation step (none exists to call), the phone is told nothing and never invalidates itself, no roll-back. Known-bad stub (does nothing) failed 5 of 6 tests first; the race test failed before the recheck; mutation check: dropping the acknowledged-alert guard fails the acknowledged test. 7 new tests. Left for later: operator CLI (f), PersistAnt (g), re-enrolment does not void the replaced phone's in-flight alerts (revoke first), audit events.
+
+## 0.0.57 — registration slice (d): PUT /device/token
+
+- Registration slice (d): `update_token` and `PUT /device/token`. The phone presents its ack token as `Authorization: Bearer` with `{"fcm_token"}` after Firebase rotates its token; the push token is replaced in one step with the credential check (`DeviceStore::replace_push_token`), the ack token is kept. The credential is checked before the body, so a stranger gets 401 whatever they send; missing, wrong, enrolment-code-as-bearer, digest-as-bearer and no-device all answer one fixed 401; a bad body with the right token is 400 and changes nothing; 413 over 16 KiB; answers are `no-store`. Nothing is reported about delivery and nothing escalates (patent rule: the phone sends no status the sender acts on). Known-bad stub (accepts anything) failed all 4 new unit tests first; mutation check: matching any non-empty token fails the 401 test. 5 new tests (4 unit, 1 over real HTTP). Left for later slices: revocation, CLI, PersistAnt, stale marking on UNREGISTERED.
+
+## 0.0.56 — registration slice (c): POST /register with a failures-only limiter
+
+- Registration slice (c): `register` module and `POST /register` route. Bearer enrolment code plus `{"fcm_token"}`; a valid code makes the phone the device and answers `201 {"ack_token"}` once (`Cache-Control: no-store`; only the digest is kept); wrong, missing, reused and expired codes answer one fixed 401. `FailureLimiter` counts failed attempts only (5 in 60 s, then 429): the code is always checked first, so a valid code passes after any flood. A bad body is 400 before the code is spent; 413 over 16 KiB. `DeviceStore` and `MemoryDevices`. Known-bad stub (accepts anything) failed the 401 and 429 tests first; mutation check: not recording failures fails the 429 test. 10 new tests (8 unit, 2 over real HTTP). Left for later slices: audit events, PersistAnt backends, revocation.
+
+## 0.0.55 — registration slice (b): one-time enrolment code and store
+
+- Registration slice (b): `enroll` module. `new_enrollment` makes a 128-bit code (32 hex digits, shown once) and its `Enrollment` (SHA-256 digest via `AckToken`, 10-minute expiry); `EnrollmentStore` with an atomic `consume` (right and unexpired: accepted once and removed; right but expired: removed and refused; wrong or reused: refused, and a wrong guess does not burn the real code); one pending enrolment, a new one replaces the old. `MemoryEnrollments`. Known-bad tests first (a stub that accepted anything failed 6 of 9: expired, reused, wrong, replaced, none pending, race); mutation check: `>=` to `>` at expiry fails the expiry test. No HTTP route yet (slice c).
+
 ## 0.0.54 — docs: A5 three-channel ruling and PC-alarm patent reading
 
 - Board 389 ruled (CireSnave 2026-11-12): app alarm to the first contact, app alarm to the second contact, then an alarm on the operator PC; SMS and voice wait. `DESIGN-A5.md` gains the ruling, tiers, build order, registry change and the PC alarm limits. `PATENT-PC-ALARM-READING.md` reads the design against US 2026/0360532 A1 claims 19 to 38 (claim 27 included) and four desktop audio-override patents read verbatim: outside as read, no claim element present; constraints 17 to 22. Not legal advice; no clearance.

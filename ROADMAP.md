@@ -2,6 +2,8 @@
 
 Ruled by CireSnave 2026-10-26 (decision 287 S15 c, A): build it as its own project; power saving disabled for this app only. Stopgap until it exists: Pushover emergency priority, with its emergency channel allowed to override Do Not Disturb.
 
+Decision (PM 2026-11-13, option a): the server is the single writer. `alarmant enroll`/`revoke` are a thin client to a loopback admin endpoint (binds 127.0.0.1 only; admin key from an env var or a user-only file, never argv, logs or error text; constant-time compare; revoke atomic under the server lock; a wrong or missing key mutates nothing).
+
 | Row | What | Status | Owner / blocker |
 |---|---|---|---|
 | A1 | Patent sweep (escalation policies are crowded; on-call vendors hold patents) BEFORE A5 is built | open | lane, first |

@@ -53,6 +53,8 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.13.0")
 
     testImplementation("junit:junit:4.13.2")
+    // android.jar's org.json is a stub in JVM unit tests; the real library lets RegistrationTest parse JSON.
+    testImplementation("org.json:json:20250517")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
 }

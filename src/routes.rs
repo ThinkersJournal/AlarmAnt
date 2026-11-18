@@ -7,13 +7,18 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use httpant_server::Server;
-use httpant_server::core::http::StatusCode;
-use httpant_server::core::http::header::{AUTHORIZATION, CONTENT_TYPE, HeaderValue};
+use httpant_server::core::http::header::{AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, HeaderValue};
+use httpant_server::core::http::{Method, StatusCode};
 use httpant_server::core::{Body, IntoResponse, PathParams, Request, Response};
 
 use crate::ack::{AckToken, AlertStore, acknowledge};
+use crate::enroll::EnrollmentStore;
 use crate::fcm::PushTransport;
 use crate::raise::{DeviceRegistry, raise_alert, response};
+use crate::register::{
+    DeviceStore, FailureLimiter, register, response as register_response, token_response,
+    update_token,
+};
 
 /// Largest request body read for `POST /alert`: the title and body limits at four bytes a
 /// character, plus JSON framing, rounded up.
@@ -74,7 +79,7 @@ pub fn system_clock() -> Clock {
 }
 
 /// The `Authorization` header as text, if present and visible ASCII.
-fn authorization(req: &Request) -> Option<&str> {
+pub(crate) fn authorization(req: &Request) -> Option<&str> {
     req.headers().get(AUTHORIZATION)?.to_str().ok()
 }
 
@@ -109,7 +114,7 @@ pub struct RaiseConfig<T> {
     pub clock: Clock,
 }
 
-fn json_response(status: u16, body: &serde_json::Value) -> Response {
+pub(crate) fn json_response(status: u16, body: &serde_json::Value) -> Response {
     let mut res = Response::new(Body::from_bytes(body.to_string()));
     *res.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     res.headers_mut()
@@ -157,6 +162,69 @@ where
             .await;
             let (status, body) = response(&result);
             json_response(status, &body)
+        }
+    })
+}
+
+/// Largest request body read for `POST /register`: an FCM token is about 160 characters.
+pub const MAX_REGISTER_BODY_BYTES: usize = 16 * 1024;
+
+/// What `POST /register` needs.
+pub struct RegisterConfig {
+    pub enrollments: Arc<dyn EnrollmentStore>,
+    pub devices: Arc<dyn DeviceStore>,
+    pub limiter: Arc<FailureLimiter>,
+    pub clock: Clock,
+}
+
+/// Adds `POST /register` (registration slice c): `Authorization: Bearer <enrolment code>`, JSON
+/// `{"fcm_token"}`; answers 201 `{"ack_token"}` once, or 400, 401, 413, 429 with fixed text. The
+/// answer is never cached.
+pub fn register_route(server: Server, cfg: RegisterConfig) -> Server {
+    server.post("/register", move |req: Request| {
+        let (enr, dev, lim, clock) = (
+            Arc::clone(&cfg.enrollments),
+            Arc::clone(&cfg.devices),
+            Arc::clone(&cfg.limiter),
+            Arc::clone(&cfg.clock),
+        );
+        async move {
+            let auth = authorization(&req).map(str::to_owned);
+            let Ok(bytes) = req.into_body().bytes(MAX_REGISTER_BODY_BYTES).await else {
+                return json_response(413, &serde_json::json!({"error": "body too large"}));
+            };
+            let Ok(text) = std::str::from_utf8(&bytes) else {
+                return json_response(400, &serde_json::json!({"error": "body is not UTF-8"}));
+            };
+            let result = register(&*enr, &*dev, &lim, auth.as_deref(), text, clock());
+            let (status, body) = register_response(&result);
+            let mut res = json_response(status, &body);
+            res.headers_mut()
+                .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            res
+        }
+    })
+}
+
+/// Adds `PUT /device/token` (registration slice d): `Authorization: Bearer <ack token>`, JSON
+/// `{"fcm_token"}` after the phone's push token rotates. Answers 200, or 400, 401, 413 with fixed
+/// text. Changes only the push token; it reports nothing about delivery and escalates nothing.
+pub fn device_token_route(server: Server, devices: Arc<dyn DeviceStore>) -> Server {
+    server.route(Method::PUT, "/device/token", move |req: Request| {
+        let dev = Arc::clone(&devices);
+        async move {
+            let auth = authorization(&req).map(str::to_owned);
+            let Ok(bytes) = req.into_body().bytes(MAX_REGISTER_BODY_BYTES).await else {
+                return json_response(413, &serde_json::json!({"error": "body too large"}));
+            };
+            let Ok(text) = std::str::from_utf8(&bytes) else {
+                return json_response(400, &serde_json::json!({"error": "body is not UTF-8"}));
+            };
+            let (status, body) = token_response(&update_token(&*dev, auth.as_deref(), text));
+            let mut res = json_response(status, &body);
+            res.headers_mut()
+                .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            res
         }
     })
 }
@@ -423,5 +491,152 @@ mod tests {
             api_key_from_env("ALARMANT_TEST_KEY_THAT_IS_NOT_SET").unwrap_err(),
             KeyError::NotSet
         );
+    }
+
+    // ---- registration slice (c) ----
+    use crate::enroll::{MemoryEnrollments, new_enrollment};
+    use crate::register::{MAX_FAILURES, MemoryDevices};
+
+    struct RegRig {
+        srv: httpant_server::RunningServer,
+        enr: Arc<MemoryEnrollments>,
+        dev: Arc<MemoryDevices>,
+        code: String,
+    }
+
+    async fn serve_register() -> RegRig {
+        let enr = Arc::new(MemoryEnrollments::default());
+        let (code, e) = new_enrollment(500);
+        crate::enroll::EnrollmentStore::set(&*enr, e);
+        let dev = Arc::new(MemoryDevices::default());
+        let srv = register_route(
+            Server::new(),
+            RegisterConfig {
+                enrollments: Arc::clone(&enr) as Arc<dyn EnrollmentStore>,
+                devices: Arc::clone(&dev) as Arc<dyn DeviceStore>,
+                limiter: Arc::default(),
+                clock: Arc::new(|| 501),
+            },
+        )
+        .bind("127.0.0.1:0")
+        .await
+        .unwrap();
+        RegRig {
+            srv,
+            enr,
+            dev,
+            code,
+        }
+    }
+
+    async fn reg(
+        srv: &httpant_server::RunningServer,
+        auth: Option<&str>,
+        body: impl Into<httpant_server::core::Bytes>,
+    ) -> (u16, String, Option<String>) {
+        let mut r = Client::new()
+            .post(format!("http://{}/register", srv.addr()))
+            .body(body);
+        if let Some(a) = auth {
+            r = r.header("authorization", a);
+        }
+        let res = r.send().await.unwrap();
+        let status = res.status().as_u16();
+        let cc = res
+            .headers()
+            .get("cache-control")
+            .map(|v| v.to_str().unwrap().to_owned());
+        (status, res.text().await.unwrap(), cc)
+    }
+
+    const REG_BODY: &str = r#"{"fcm_token":"tok-http"}"#;
+
+    #[tokio::test]
+    async fn register_over_http_is_201_once_and_the_token_acks_a_raised_alert() {
+        let rig = serve_register().await;
+        let auth = format!("Bearer {}", rig.code);
+        let (status, text, cc) = reg(&rig.srv, Some(&auth), REG_BODY).await;
+        assert_eq!(status, 201);
+        assert_eq!(cc.as_deref(), Some("no-store"));
+        let token = serde_json::from_str::<serde_json::Value>(&text).unwrap()["ack_token"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let d = rig.dev.device().unwrap();
+        assert!(d.ack_token.matches(&token));
+        assert!(!text.contains(&rig.code));
+        // the code is spent
+        assert_eq!(reg(&rig.srv, Some(&auth), REG_BODY).await.0, 401);
+        // and the issued token works for an alert raised to this device
+        let store = Arc::new(MemoryStore::default());
+        let id = crate::raise::raise_authorised(
+            r#"{"title":"t","body":"b"}"#,
+            &*rig.dev,
+            &Fake::default(),
+            &*store,
+            600,
+        )
+        .await
+        .unwrap();
+        let bearer = format!("Bearer {token}");
+        assert_eq!(
+            acknowledge(&*store, &id, Some(&bearer), 610),
+            crate::ack::AckOutcome::Acked
+        );
+        rig.srv.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn register_failures_over_http_and_a_valid_code_after_a_flood() {
+        let rig = serve_register().await;
+        for i in 0..MAX_FAILURES {
+            let (s, text, _) = reg(&rig.srv, Some("Bearer WRONG"), REG_BODY).await;
+            assert_eq!(s, 401, "attempt {i}");
+            assert!(!text.contains("WRONG"));
+        }
+        assert_eq!(reg(&rig.srv, Some("Bearer WRONG"), REG_BODY).await.0, 429);
+        assert_eq!(reg(&rig.srv, None, REG_BODY).await.0, 429);
+        let auth = format!("Bearer {}", rig.code);
+        // a bad body does not spend the code, even while the limiter is tripped
+        assert_eq!(reg(&rig.srv, Some(&auth), "nope").await.0, 400);
+        assert_eq!(reg(&rig.srv, Some(&auth), vec![0xff]).await.0, 400);
+        assert_eq!(reg(&rig.srv, Some(&auth), REG_BODY).await.0, 201);
+        assert!(rig.dev.device().is_some());
+        let big = vec![b' '; MAX_REGISTER_BODY_BYTES + 1];
+        assert_eq!(reg(&rig.srv, Some(&auth), big).await.0, 413);
+        let _ = &rig.enr;
+        rig.srv.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn put_device_token_over_http_rotates_the_push_token_for_the_ack_token_only() {
+        let dev = Arc::new(MemoryDevices::default());
+        dev.set(Device {
+            push_token: DeviceToken::new("old-tok"),
+            ack_token: AckToken::new("ack-secret"),
+        });
+        let srv = device_token_route(Server::new(), Arc::clone(&dev) as Arc<dyn DeviceStore>)
+            .bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let put = |auth: Option<&'static str>, body: &'static str| {
+            let url = format!("http://{}/device/token", srv.addr());
+            async move {
+                let mut r = Client::new().put(url).body(body);
+                if let Some(a) = auth {
+                    r = r.header("authorization", a);
+                }
+                r.send().await.unwrap().status().as_u16()
+            }
+        };
+        let body = r#"{"fcm_token":"new-tok"}"#;
+        assert_eq!(put(None, body).await, 401);
+        assert_eq!(put(Some("Bearer wrong"), body).await, 401);
+        assert_eq!(dev.device().unwrap().push_token.expose(), "old-tok");
+        assert_eq!(put(Some("Bearer ack-secret"), "{}").await, 400);
+        assert_eq!(put(Some("Bearer ack-secret"), body).await, 200);
+        assert_eq!(dev.device().unwrap().push_token.expose(), "new-tok");
+        assert!(dev.device().unwrap().ack_token.matches("ack-secret"));
+        srv.shutdown().await.unwrap();
     }
 }

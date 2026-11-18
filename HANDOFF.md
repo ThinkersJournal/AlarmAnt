@@ -1,16 +1,21 @@
 # HANDOFF: AlarmAnt
 
-STATE (2026-11-11): FULL SPEED. Main (0.0.45) also has the A4 and A9 HTTP routes (`routes`, env-only API key); #46 (A7 sideload notes, 0.0.46) awaits the gate; device registration (how the phone's tokens reach the sender) is open and needs a PM design call. Earlier: A2 `fcm`+`auth`+`push` (HttpPushTransport over HTTPAnt; base-URL setter test-only), A4 `ack`, A9 `raise`, A6 `selftest` (persisted state, next wake, run_step, notifier trait), A5 state machine + `escalate` + persistence store + `wire`, and the Android app. A5 slices needing no provider are done; slice 3 waits on board 389.
+STATE (2026-11-17): FULL SPEED. Main (0.2.7+) has the whole server side of ruling 389: escalation chain first app -> second app -> PC alarm (`escalate`, `wire`, `channel`, `second`), persisted stores (`persist`), loopback admin endpoint + `enroll`/`revoke` client (`adminapi`, `admin`), the `alarmant` binary (`serve`, `enroll|revoke --contact first|second`), the PC alarm program `alarmant-pc` (Windows, Core Audio unmute + max volume, siren, Stop dialog = Acknowledge; `pcclient`, `POST /pc/ack/:id`), the Android app, and the patent readings. Nothing has been run live: needs a Firebase service account (board 354, CireSnave).
 
-RULES (PM, verbatim intent): phone never reports "received"/"viewed", only Acknowledge; no Decline control; escalation on a fixed timer only. Any change needs a fresh patent reading and the PM's OK. Keep PATENT-A5-READING.md current, labelled a model reading, not legal advice. The PM tries the USPTO continuity lookup for the Masimo family before any public release. Sweep stays incomplete: say "outside as read", never "clear".
-Secrets: real `android/app/google-services.json` git-ignored; FCM tokens never logged; service-account key is board 354 (CireSnave, VPS only).
+RULES (PM): phone never reports "received"/"viewed", only Acknowledge; no Decline or negative status (PATENT-SWEEP constraints 13-22: server never records a phone or PC fetch; PC sends only Acknowledge, no status); escalation on a fixed timer only; any change needs a fresh patent reading and the PM's OK. Say "outside as read", never "clear" (sweep incomplete; not legal advice). Secrets never in repo, argv or logs.
+Workflow: Sonnet only; one changelog FRAGMENT per PR (`changelog.d/<topic>.md`, `kind: ...`, `---`); never edit CHANGELOG.md, Cargo.toml version or Cargo.lock (a new dependency's lock entry is the one exception). Sign PR bodies `— lane: alarmant`. Primary stays on `main`; branches in `C:\Projects\AlarmAnt-wt-<topic>`; after a squash-merge use a merge commit, never force-push. Messages: compact format, `key=` pairs only. Clean worktree+branch after each merge.
 
-NEXT A5: slice 3 `AlertChannel` adapter behind the trait: provider pick is CireSnave's, ask the PM first, wire none until told. Slice 4 ConfigurAnt/PersistAnt backends for `EscalationConfig` and `EscalationStore` (need the Ants) plus a scheduler loop calling `Escalator::tick`.
-A6 `run_loop` + `Schedule` is DONE (0.0.41, runtime-agnostic, trait and fake only; the service must supply a tokio sleep and a real FailureNotifier, channel is board 131/389, CireSnave's). Kotlin `AckWorker` stop on 401/404 is DONE (0.0.42, #42). Nothing unblocked remains: all else waits on board 389 or PM tasks below. A2 2b is DONE (#38, #39). No open PRs.
+IN FLIGHT:
+- PR #69 (branch `token-rotation`, worktree `AlarmAnt-wt-tok`): slice (h) part 2, `PUT /device/token` on FCM rotation (`TokenWorker`), plus this HANDOFF; main already has #68 (registration step) and #67. Unbuilt locally; CI is the check. Wait for the PM gate, then remove the worktree and branch. One PR per day (CLAUDE.md 2026-11-16).
+- Branch `a8-release-signing` (worktree `AlarmAnt-wt-a8`): WIP pushed, untested (no JDK locally): `signingConfig` from env vars in `android/app/build.gradle.kts`. Still to do: release workflow (tag `android-v*`, never on PRs) and `ANDROID-RELEASE.md`; verify in CI only.
 
-Tools: `C:\Projects\tools\patent-claims.py <numbers>`; emulator AVD `alarm36` in `C:\Users\cires\lane-tools\alarmant`.
-Rules: Sonnet only, questions to the PM, bump the version per PR (next 0.0.44), `Cargo.lock` must match (CI --locked). Primary checkout stays on `main`; branches in worktrees `C:\Projects\AlarmAnt-wt-<topic>`.
+NEXT, in order:
+1. Slice (h) is done once #69 merges. Next: finish A8 signing (below).
+2. Finish A8 signing (above).
+3. Phone-session readiness: cleartext allowance or https for a LAN server; board 354 files (CireSnave).
+4. Known gap: re-enrolment does not void a replaced phone's in-flight alerts (revoke first). PC alarm board and second-push queue are in memory: an alert already at the PC step is not raised again after a restart.
+5. Owed: a person's confirmation of the three patent readings (outside as read); the sweep is incomplete.
 
-WAIT: board 389 ruled by CireSnave (SMS/voice provider; 0 hits means it left the open list, then read the ruling) | check: grep -c '^### 389\.' /c/Projects/CIRESNAVE-DECISIONS.md | wake: 2026-11-12T03:00:00Z
+Tools: `C:\Projects\tools\patent-claims.py <numbers>`; emulator AVD `alarm36` in `C:\Users\cires\lane-tools\alarmant`. Windows: `bash tools/...` is not available, use `python tools/check-fragment.py origin/main`.
 
-OPEN PM TASKS (2026-11-11): (1) read US 19/662,313 (continuation of 19/020,852, filed 2026-04-29, pending): USPTO ODP API needs a key (401), PPUBS session endpoint guessed wrong (404), Google finds no 2026 publication, Justia 403; say plainly if unpublished, map to A5 as in PATENT-A5-READING.md; (2) A6 remainder (scheduler loop; ask PM on notifier); (3) DESIGN-A5 "Question 2026-11-10" (person 2 via the app) awaits CireSnave's ruling on board 389.
+WAIT: #69 merged by the PM gate | check: gh pr view 69 --repo ThinkersJournal/AlarmAnt --json state --jq .state | wake: 2026-11-18T00:22:00Z
