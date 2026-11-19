@@ -17,7 +17,7 @@ use std::sync::Mutex;
 
 use serde_json::{Value, json};
 
-use crate::ack::{AckToken, bearer_token};
+use crate::ack::{AckToken, AlertStore, bearer_token};
 use crate::enroll::{Contact, EnrollmentStore};
 use crate::fcm::DeviceToken;
 use crate::raise::{Device, DeviceRegistry};
@@ -177,6 +177,7 @@ fn parse_fcm_token(body: &str) -> Result<String, RegisterError> {
 pub fn register(
     enrollments: &dyn EnrollmentStore,
     devices: &dyn DeviceStore,
+    alerts: &dyn AlertStore,
     limiter: &FailureLimiter,
     authorization: Option<&str>,
     body: &str,
@@ -196,6 +197,10 @@ pub fn register(
         });
     };
     let token = new_ack_token();
+    let replaced = match contact {
+        Contact::First => devices.device(),
+        Contact::Second => devices.second_device(),
+    };
     devices.set_for(
         contact,
         Device {
@@ -203,6 +208,11 @@ pub fn register(
             ack_token: AckToken::new(&token),
         },
     );
+    // Registration: a replaced phone is gone, like a revoked one. Server-side only; nothing is sent
+    // to it and nothing is restored (PATENT-REGISTRATION-READING constraints).
+    if let Some(old) = replaced {
+        alerts.void_ack_tokens(&old.ack_token);
+    }
     Ok(token)
 }
 
@@ -273,6 +283,7 @@ mod tests {
     struct Rig {
         enr: MemoryEnrollments,
         dev: MemoryDevices,
+        alerts: crate::ack::MemoryStore,
         lim: FailureLimiter,
         code: String,
     }
@@ -284,13 +295,14 @@ mod tests {
         Rig {
             enr,
             dev: MemoryDevices::default(),
+            alerts: crate::ack::MemoryStore::default(),
             lim: FailureLimiter::default(),
             code,
         }
     }
 
     fn go(r: &Rig, auth: Option<&str>, body: &str, now: u64) -> Result<String, RegisterError> {
-        register(&r.enr, &r.dev, &r.lim, auth, body, now)
+        register(&r.enr, &r.dev, &r.alerts, &r.lim, auth, body, now)
     }
 
     fn bearer(c: &str) -> String {
@@ -301,6 +313,60 @@ mod tests {
         let r = rig();
         let token = go(&r, Some(&bearer(&r.code)), BODY, 1001).unwrap();
         (r, token)
+    }
+
+    fn in_flight(token: &str) -> crate::ack::AlertRecord {
+        crate::ack::AlertRecord {
+            alert_id: "a1".into(),
+            state: crate::AlertState::Sent,
+            sent_at: 0,
+            acked_at: None,
+            ack_token: AckToken::new(token),
+            second_ack_token: None,
+            text: None,
+        }
+    }
+
+    fn fresh_code(r: &Rig, now: u64) -> String {
+        let (code, e) = new_enrollment(now);
+        r.enr.set(e);
+        code
+    }
+
+    #[test]
+    fn re_enrolment_voids_the_replaced_phones_in_flight_ack_token_but_not_the_new_one() {
+        use crate::ack::{AckOutcome, acknowledge};
+        let (r, old) = registered();
+        r.alerts.insert(in_flight(&old));
+        let code = fresh_code(&r, 2000);
+        let new = go(&r, Some(&bearer(&code)), BODY, 2001).unwrap();
+        assert_ne!(old, new);
+        // The old phone can no longer stand the alert down; its token matches nothing.
+        let denied = acknowledge(&r.alerts, "a1", Some(&bearer(&old)), 2002);
+        assert_eq!(denied, AckOutcome::Unauthorized, "the old token must fail");
+        assert_eq!(r.alerts.get("a1").unwrap().state, crate::AlertState::Sent);
+        // The new phone's token is the one the registry holds now, and it still acknowledges.
+        assert!(r.dev.device().unwrap().ack_token.matches(&new));
+        let mut live = in_flight(&new);
+        live.alert_id = "a2".into();
+        r.alerts.insert(live);
+        assert_eq!(
+            acknowledge(&r.alerts, "a2", Some(&bearer(&new)), 2003),
+            AckOutcome::Acked
+        );
+    }
+
+    #[test]
+    fn a_first_enrolment_and_the_other_contacts_alerts_are_untouched() {
+        let r = rig();
+        r.alerts.insert(in_flight("someone-elses-token"));
+        go(&r, Some(&bearer(&r.code)), BODY, 1001).unwrap();
+        assert_eq!(r.alerts.void_ack_tokens(&AckToken::new("x")), 0);
+        let rec = r.alerts.get("a1").unwrap();
+        assert!(
+            rec.ack_token.matches("someone-elses-token"),
+            "nothing to replace, nothing voided"
+        );
     }
 
     fn put(r: &Rig, auth: Option<&str>, body: &str) -> Result<(), RegisterError> {

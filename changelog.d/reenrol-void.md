@@ -1,0 +1,3 @@
+kind: Re-enrolling a contact voids the replaced phone's in-flight ack tokens
+---
+`register()` now also voids the ack token of the device it replaces, on every in-flight alert, exactly as `revoke` does (PM ruling 2026-11-19, option a), so an old phone can no longer stand down an alert once a new one is enrolled; the alert then escalates on its normal timer. Server-side only: nothing is sent to the old phone and nothing is restored. A first enrolment (nothing replaced) voids nothing. Test written first and seen failing (the old token acknowledged); a sabotage check (voiding the new token instead) fails it. `RegisterConfig` gains `alerts`. 182 Rust tests pass locally; nothing run live.

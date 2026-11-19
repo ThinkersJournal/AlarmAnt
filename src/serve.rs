@@ -84,6 +84,7 @@ where
         RegisterConfig {
             enrollments: Arc::clone(&app.enrollments),
             devices: Arc::clone(&devices),
+            alerts: Arc::clone(&app.alerts),
             limiter: Arc::clone(&app.limiter),
             clock: Arc::clone(&app.clock),
         },
