@@ -1,7 +1,7 @@
 # AlarmAnt
 
 
-Enrolling a phone: the app accepts only an `https://` server address (the enrolment code and the ack token must not cross a network in the clear). Today the server itself speaks plain HTTP, so a phone can enrol only against a server behind a TLS reverse proxy with a public certificate; a home-LAN setup without a proxy is not yet supported (server TLS is planned).
+Enrolling a phone: the app accepts only an `https://` server address (the enrolment code and the ack token must not cross a network in the clear). The server serves HTTPS itself when given `ALARMANT_TLS_CERT_FILE` and `ALARMANT_TLS_KEY_FILE` (a PEM chain and key; the phone must trust that certificate, so use a publicly trusted one), or sits behind a TLS proxy. A self-signed certificate on a home LAN is not yet supported (pinning is planned).
 
 An emergency alert that cannot be ignored. A small sender raises a high-priority push; an Android app answers by playing an alarm on the alarm volume stream at maximum, showing a full-screen alert, and repeating until a person taps Acknowledge. If nobody acknowledges in time it escalates to a second person. A daily self-test proves the whole chain still works.
 

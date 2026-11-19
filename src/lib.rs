@@ -23,6 +23,7 @@ pub mod revoke;
 pub mod routes;
 pub mod second;
 pub mod selftest;
+pub mod tls;
 pub mod serve;
 pub mod wire;
 

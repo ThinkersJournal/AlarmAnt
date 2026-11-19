@@ -5,7 +5,7 @@
 //! Environment for `serve`: `ALARMANT_BIND` (public address, required), `ALARMANT_DATA_DIR`,
 //! `ALARMANT_SERVICE_ACCOUNT_FILE`, `ALARMANT_API_KEY`, `ALARMANT_PC_KEY`, `ALARMANT_ADMIN_KEY` or
 //! `ALARMANT_ADMIN_KEY_FILE`, optional `ALARMANT_ADMIN_ADDR` (loopback, default 127.0.0.1:9100) and
-//! `ALARMANT_MINUTES` (default 5). The client commands read the admin key and address the same way.
+//! `ALARMANT_MINUTES` (default 5), and `ALARMANT_TLS_CERT_FILE` + `ALARMANT_TLS_KEY_FILE` (PEM; both or neither) to serve HTTPS itself. The client commands read the admin key and address the same way.
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -135,7 +135,12 @@ async fn serve() -> Result<(), String> {
     )
     .await
     .map_err(|_| "the admin endpoint could not start (loopback address only)")?;
-    let _public = public_server(&app)
+    let tls = alarmant::tls::paths(env("ALARMANT_TLS_CERT_FILE"), env("ALARMANT_TLS_KEY_FILE"))?;
+    let mut public = public_server(&app);
+    if let Some((cert, key)) = &tls {
+        public = public.tls(alarmant::tls::acceptor_from_files(cert, key)?);
+    }
+    let _public = public
         .bind(bind.to_string().as_str())
         .await
         .map_err(|_| "the public address could not be bound")?;
