@@ -172,6 +172,15 @@ impl Escalator {
     }
 
     /// Where an open alert stands; `None` if acknowledged or unknown.
+    /// Ids of the open alerts that have reached `stage` (used to rebuild the PC-alarm board after a restart).
+    pub fn at_stage(&self, stage: Stage) -> Vec<String> {
+        self.open
+            .iter()
+            .filter(|(_, e)| e.alert.stage() == stage)
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
     pub fn state(&self, alert_id: &str) -> Option<AlertState> {
         self.open.get(alert_id).map(|e| e.alert.state())
     }

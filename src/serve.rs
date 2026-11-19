@@ -11,6 +11,7 @@ use httpant_server::Server;
 use httpant_server::core::http::StatusCode;
 use httpant_server::core::{IntoResponse, PathParams, Request, Response};
 
+use crate::Stage;
 use crate::ack::{AckToken, AlertStore, bearer_token};
 use crate::channel::{Dispatcher, PcAlarmBoard, PcAlarmConfig, drain_second, pc_alarm_route};
 use crate::enroll::EnrollmentStore;
@@ -66,6 +67,27 @@ impl<T, D> App<T, D> {
             board,
             limiter: Arc::new(FailureLimiter::default()),
             clock,
+        }
+    }
+}
+
+impl<T, D> App<T, D> {
+    /// Replaces the in-memory escalator with one backed by `store`: open alerts resume (a timer that
+    /// came due while down fires once on the next tick) and every alert already at the PC-alarm
+    /// stage goes back on the board, so a restart does not silently end the chain. The second
+    /// app's push is not repeated (a call already made is never made twice).
+    pub fn with_escalations(
+        self,
+        minutes: u64,
+        store: Box<dyn crate::escalate::EscalationStore>,
+    ) -> Self {
+        let escalator = Escalator::with_store(minutes, store);
+        for id in escalator.at_stage(Stage::PcAlarm) {
+            self.board.raise(&id);
+        }
+        App {
+            escalator: Arc::new(Mutex::new(escalator)),
+            ..self
         }
     }
 }
@@ -314,6 +336,37 @@ mod tests {
             1,
             Arc::new(move || now.load(Ordering::SeqCst)),
         )
+    }
+
+    #[test]
+    fn a_restart_puts_an_alert_already_at_the_pc_stage_back_on_the_board() {
+        use crate::AlertState;
+        use crate::ack::AlertRecord;
+        use crate::escalate::{EscalationRecord, EscalationStore, MemoryEscalationStore};
+        let rec = |id: &str, stage| EscalationRecord {
+            alert_id: id.into(),
+            state: AlertState::Escalated,
+            stage,
+            due: Some(10),
+        };
+        let store = Arc::new(MemoryEscalationStore::default());
+        store.save(rec("at-pc", Stage::PcAlarm));
+        store.save(rec("at-second", Stage::SecondApp));
+        let app =
+            app(Arc::new(AtomicU64::new(0))).with_escalations(1, Box::new(Arc::clone(&store)));
+        let alerts = MemoryStore::default();
+        for id in ["at-pc", "at-second"] {
+            alerts.insert(AlertRecord {
+                alert_id: id.into(),
+                state: AlertState::Escalated,
+                sent_at: 0,
+                acked_at: None,
+                ack_token: AckToken::new("ack1"),
+                second_ack_token: None,
+                text: None,
+            });
+        }
+        assert_eq!(app.board.active(&alerts), vec!["at-pc".to_owned()]);
     }
 
     async fn call(

@@ -16,7 +16,9 @@ use std::time::Duration;
 use alarmant::ack::AckToken;
 use alarmant::adminapi::{AdminConfig, admin_key_from_file, admin_routes, bind_loopback, send};
 use alarmant::auth::ServiceAccount;
-use alarmant::persist::{Disk, PersistedAlerts, PersistedDevices, PersistedEnrollments};
+use alarmant::persist::{
+    Disk, PersistedAlerts, PersistedDevices, PersistedEnrollments, PersistedEscalations,
+};
 use alarmant::push::HttpPushTransport;
 use alarmant::routes::{api_key_from_value, system_clock};
 use alarmant::serve::{App, public_server, tick_once};
@@ -104,16 +106,20 @@ async fn serve() -> Result<(), String> {
     let admin_addr = admin_addr()?;
 
     let clock = system_clock();
-    let app = Arc::new(App::new(
-        api_key,
-        pc_key,
-        Arc::clone(&devices),
-        alerts.clone(),
-        enrollments.clone(),
-        Arc::new(transport),
-        minutes,
-        Arc::clone(&clock),
-    ));
+    let escalations = PersistedEscalations::open(&disk).map_err(|e| e.to_string())?;
+    let app = Arc::new(
+        App::new(
+            api_key,
+            pc_key,
+            Arc::clone(&devices),
+            alerts.clone(),
+            enrollments.clone(),
+            Arc::new(transport),
+            minutes,
+            Arc::clone(&clock),
+        )
+        .with_escalations(minutes, Box::new(escalations)),
+    );
     let _admin = bind_loopback(
         admin_routes(
             Server::new(),
