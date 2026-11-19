@@ -21,12 +21,13 @@ use persistant::blocking::Store;
 use persistant::{Config, Error, Need, Needs};
 use serde_json::{Value, json};
 
-use crate::AlertState;
 use crate::ack::{AckToken, AlertRecord, AlertStore, AlertText, MemoryStore};
 use crate::enroll::{Contact, EnrollError, Enrollment, EnrollmentStore, MemoryEnrollments};
+use crate::escalate::{EscalationRecord, EscalationStore};
 use crate::fcm::DeviceToken;
 use crate::raise::{Device, DeviceRegistry};
 use crate::register::{DeviceStore, MemoryDevices};
+use crate::{AlertState, Stage};
 
 /// Why a data directory could not be opened. Fixed text; never a stored value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,6 +130,7 @@ pub struct PersistedDevices {
 const DEVICES: &str = "devices.json";
 const ALERTS: &str = "alerts.json";
 const ENROLLMENTS: &str = "enrollments.json";
+const ESCALATIONS: &str = "escalations.json";
 
 impl PersistedDevices {
     pub fn open(disk: &Arc<Disk>) -> Result<Self, PersistError> {
@@ -329,6 +331,93 @@ impl AlertStore for PersistedAlerts {
     }
 }
 
+fn stage_name(s: Stage) -> &'static str {
+    match s {
+        Stage::First => "first",
+        Stage::SecondApp => "second_app",
+        Stage::PcAlarm => "pc_alarm",
+    }
+}
+
+fn stage_from(s: &str) -> Option<Stage> {
+    Some(match s {
+        "first" => Stage::First,
+        "second_app" => Stage::SecondApp,
+        "pc_alarm" => Stage::PcAlarm,
+        _ => return None,
+    })
+}
+
+fn escalation_value(r: &EscalationRecord) -> Value {
+    json!({
+        "alert_id": r.alert_id,
+        "state": state_name(r.state),
+        "stage": stage_name(r.stage),
+        "due": r.due,
+    })
+}
+
+fn escalation_from(v: &Value) -> Option<EscalationRecord> {
+    Some(EscalationRecord {
+        alert_id: v.get("alert_id")?.as_str()?.to_owned(),
+        state: state_from(v.get("state")?.as_str()?)?,
+        stage: stage_from(v.get("stage")?.as_str()?)?,
+        due: match v.get("due")? {
+            Value::Null => None,
+            d => Some(d.as_u64()?),
+        },
+    })
+}
+
+/// [`EscalationStore`] on disk (`escalations.json`): the open alerts' stage and next timer, so a
+/// restart resumes the chain (and rebuilds the PC-alarm board) instead of silently dropping it.
+#[derive(Debug)]
+pub struct PersistedEscalations {
+    disk: Arc<Disk>,
+    records: Mutex<std::collections::BTreeMap<String, EscalationRecord>>,
+}
+
+impl PersistedEscalations {
+    pub fn open(disk: &Arc<Disk>) -> Result<Self, PersistError> {
+        let mut records = std::collections::BTreeMap::new();
+        if let Some(v) = disk.load(ESCALATIONS)? {
+            for r in v.as_array().ok_or(PersistError::Corrupt)? {
+                let rec = escalation_from(r).ok_or(PersistError::Corrupt)?;
+                records.insert(rec.alert_id.clone(), rec);
+            }
+        }
+        Ok(PersistedEscalations {
+            disk: Arc::clone(disk),
+            records: Mutex::new(records),
+        })
+    }
+
+    fn write(&self, records: &std::collections::BTreeMap<String, EscalationRecord>) {
+        let all: Vec<Value> = records.values().map(escalation_value).collect();
+        self.disk.save(ESCALATIONS, &Value::Array(all));
+    }
+}
+
+impl EscalationStore for PersistedEscalations {
+    fn save(&self, record: EscalationRecord) {
+        let mut m = self.records.lock().unwrap_or_else(|p| p.into_inner());
+        m.insert(record.alert_id.clone(), record);
+        self.write(&m);
+    }
+
+    fn remove(&self, alert_id: &str) {
+        let mut m = self.records.lock().unwrap_or_else(|p| p.into_inner());
+        if m.remove(alert_id).is_some() {
+            self.write(&m);
+        }
+    }
+
+    fn load_all(&self) -> Vec<EscalationRecord> {
+        let m = self.records.lock().unwrap_or_else(|p| p.into_inner());
+        m.values().cloned().collect()
+    }
+}
+
 /// [`EnrollmentStore`] on disk (`enrollments.json`).
 #[derive(Debug)]
 pub struct PersistedEnrollments {
@@ -405,6 +494,64 @@ mod tests {
             }
         }
         out
+    }
+
+    #[test]
+    fn escalations_survive_a_restart_and_an_ack_removes_them() {
+        use crate::escalate::Escalator;
+        let dir = tempfile::tempdir().unwrap();
+        {
+            let disk = Disk::open(dir.path()).unwrap();
+            let store = PersistedEscalations::open(&disk).unwrap();
+            store.save(EscalationRecord {
+                alert_id: "a".into(),
+                state: AlertState::Escalated,
+                stage: Stage::PcAlarm,
+                due: Some(900),
+            });
+            store.save(EscalationRecord {
+                alert_id: "b".into(),
+                state: AlertState::Sent,
+                stage: Stage::First,
+                due: Some(300),
+            });
+            store.save(EscalationRecord {
+                alert_id: "c".into(),
+                state: AlertState::Unresolved,
+                stage: Stage::PcAlarm,
+                due: None,
+            });
+        }
+        let disk = Disk::open(dir.path()).unwrap();
+        let store = PersistedEscalations::open(&disk).unwrap();
+        let e = Escalator::with_store(5, Box::new(store));
+        assert_eq!(
+            e.at_stage(Stage::PcAlarm),
+            vec!["a".to_owned(), "c".to_owned()]
+        );
+        assert_eq!(e.at_stage(Stage::First), vec!["b".to_owned()]);
+        assert_eq!(e.state("c"), Some(AlertState::Unresolved));
+        assert_eq!(e.next_due(), Some(300));
+        let store = PersistedEscalations::open(&disk).unwrap();
+        store.remove("a");
+        assert_eq!(
+            PersistedEscalations::open(&disk).unwrap().load_all().len(),
+            2
+        );
+    }
+
+    #[test]
+    fn a_corrupt_escalations_file_is_refused_not_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let disk = Disk::open(dir.path()).unwrap();
+        disk.save(
+            ESCALATIONS,
+            &json!([{"alert_id": "a", "state": "nope", "stage": "first", "due": 1}]),
+        );
+        assert_eq!(
+            PersistedEscalations::open(&disk).err(),
+            Some(PersistError::Corrupt)
+        );
     }
 
     #[test]

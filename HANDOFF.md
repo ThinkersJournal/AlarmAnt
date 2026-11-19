@@ -11,7 +11,7 @@ IN FLIGHT:
 NEXT, in order:
 1. Open the A8 PR (above) when the day's slot allows; send [READY]; then ask CireSnave (via the PM) to set the five repo secrets listed in ANDROID-RELEASE.md.
 2. Phone-session readiness: cleartext allowance or https for a LAN server; board 354 files (CireSnave).
-3. Known gap: re-enrolment does not void a replaced phone's in-flight alerts (revoke first). PC alarm board and second-push queue are in memory: an alert already at the PC step is not raised again after a restart.
+3. Known gap: re-enrolment does not void a replaced phone's in-flight alerts (revoke first). (The restart gap is closed by the `pc-board-persist` PR: escalation records persist and the PC board is rebuilt.)
 4. Owed: a person's confirmation of the three patent readings (outside as read); the sweep is incomplete.
 
 Tools: `C:\Projects\tools\patent-claims.py <numbers>`; emulator AVD `alarm36` in `C:\Users\cires\lane-tools\alarmant`. Windows: `bash tools/...` is not available, use `python tools/check-fragment.py origin/main`.

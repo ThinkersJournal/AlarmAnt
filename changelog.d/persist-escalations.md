@@ -1,0 +1,3 @@
+kind: Escalation state and the PC-alarm board survive a restart
+---
+The served app used an in-memory escalator, so a restart dropped every open alert's timer and the PC-alarm board. `PersistedEscalations` (`escalations.json`, PersistAnt atomic replace, a corrupt file refused not overwritten) now backs the escalator, and `App::with_escalations` resumes the open alerts and puts every alert already at the PC-alarm stage back on the board; `alarmant serve` uses it. A timer that came due while down fires one step on the next tick; the second app push is not repeated. Tests: records round-trip and an ack removes one, a corrupt file is refused, and a restart restores the board (checked failing with the re-seed removed). Rust tests: 183 pass locally; nothing run live.

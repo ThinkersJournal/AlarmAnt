@@ -7,8 +7,9 @@
 //! acknowledgement, which ends both (the board is read against the alert store, so an acked alert
 //! drops off it). Nothing here logs or carries a token.
 //!
-//! Limit: the board and the queue are in memory. After a restart an alert already at the PC-alarm
-//! stage is not raised again until someone re-raises it.
+//! After a restart the served app rebuilds the board from the persisted escalation records
+//! (`App::with_escalations`). The second-push queue is still in memory: it is drained right after
+//! each tick, and a push already made is never repeated.
 
 use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
