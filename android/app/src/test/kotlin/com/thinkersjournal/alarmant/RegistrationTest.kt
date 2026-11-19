@@ -20,6 +20,17 @@ class RegistrationTest {
     }
 
     @Test
+    fun aPinInTheLinkIsCarriedAndAMalformedPinRejectsTheLink() {
+        val pin = "ab".repeat(32)
+        val got = Registration.parseLink("alarmant://enroll?u=https%3A%2F%2F10.0.0.5%3A8443&c=abc&f=$pin")
+        assertEquals(Registration.Enrolment("https://10.0.0.5:8443", "abc", pin), got)
+        assertNull(Registration.parseLink("alarmant://enroll?u=https://h&c=abc&f=nothex"))
+        assertNull(Registration.parseLink("alarmant://enroll?u=https://h&c=abc&f=" + "AB".repeat(32)))
+        assertNull(Registration.parseLink("alarmant://enroll?u=https://h&c=abc&f="))
+        assertNull(Registration.parseLink("alarmant://enroll?u=https://h&c=abc")!!.pin)
+    }
+
+    @Test
     fun malformedLinksAreRejected() {
         for (bad in listOf(
             "", "alarmant://enroll", "alarmant://enroll?u=http://h", "alarmant://enroll?c=abc",

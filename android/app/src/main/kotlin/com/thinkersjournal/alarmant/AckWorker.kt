@@ -19,8 +19,9 @@ class AckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
         val config = applicationContext.getSharedPreferences("config", Context.MODE_PRIVATE)
         val base = config.getString("ack_base_url", null) ?: return Result.retry()
         val token = config.getString("device_token", null) ?: return Result.retry()
+        val pin = config.getString("ack_pin", null)
         return try {
-            val conn = URL("$base/ack/$alertId").openConnection() as HttpURLConnection
+            val conn = PinnedTls.open(URL("$base/ack/$alertId"), pin)
             try {
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Authorization", "Bearer $token")

@@ -5,7 +5,9 @@
 //! Environment for `serve`: `ALARMANT_BIND` (public address, required), `ALARMANT_DATA_DIR`,
 //! `ALARMANT_SERVICE_ACCOUNT_FILE`, `ALARMANT_API_KEY`, `ALARMANT_PC_KEY`, `ALARMANT_ADMIN_KEY` or
 //! `ALARMANT_ADMIN_KEY_FILE`, optional `ALARMANT_ADMIN_ADDR` (loopback, default 127.0.0.1:9100) and
-//! `ALARMANT_MINUTES` (default 5), and `ALARMANT_TLS_CERT_FILE` + `ALARMANT_TLS_KEY_FILE` (PEM; both or neither) to serve HTTPS itself. The client commands read the admin key and address the same way.
+//! `ALARMANT_MINUTES` (default 5), and `ALARMANT_TLS_CERT_FILE` + `ALARMANT_TLS_KEY_FILE` (PEM; both or neither) to serve HTTPS itself.
+//! `ALARMANT_TLS_SELF_SIGNED_NAMES` (IPs and host names, comma-separated) instead makes a self-signed pair in the data directory. For `enroll`, `ALARMANT_PUBLIC_URL`
+//! (the `https://` address the phone uses) makes the client print the full enrol link, with the pin when a self-signed pair exists in `ALARMANT_DATA_DIR`. The client commands read the admin key and address the same way.
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -70,6 +72,17 @@ async fn client(args: &[String]) -> Result<(), String> {
         .await
         .map_err(|e| e.message().to_owned())?;
     print!("{text}");
+    if let (true, Some(base), Some(code)) = (
+        matches!(command, alarmant::admin::Command::Enroll(_)),
+        env("ALARMANT_PUBLIC_URL"),
+        text.lines().nth(1),
+    ) {
+        let pin = env("ALARMANT_DATA_DIR")
+            .and_then(|d| std::fs::read(Path::new(&d).join("tls-cert.pem")).ok())
+            .and_then(|c| alarmant::tls::fingerprint_hex(&c).ok());
+        println!("Link for the phone:
+{}", alarmant::tls::enrol_link(&base, code, pin.as_deref()));
+    }
     Ok(())
 }
 
@@ -135,10 +148,19 @@ async fn serve() -> Result<(), String> {
     )
     .await
     .map_err(|_| "the admin endpoint could not start (loopback address only)")?;
-    let tls = alarmant::tls::paths(env("ALARMANT_TLS_CERT_FILE"), env("ALARMANT_TLS_KEY_FILE"))?;
+    let mut tls = alarmant::tls::paths(env("ALARMANT_TLS_CERT_FILE"), env("ALARMANT_TLS_KEY_FILE"))?;
+    if let Some(names) = env("ALARMANT_TLS_SELF_SIGNED_NAMES") {
+        if tls.is_some() {
+            return Err("set ALARMANT_TLS_SELF_SIGNED_NAMES or the certificate and key files, not both".to_owned());
+        }
+        tls = Some(alarmant::tls::self_signed_in(Path::new(&dir), &names)?);
+    }
     let mut public = public_server(&app);
     if let Some((cert, key)) = &tls {
         public = public.tls(alarmant::tls::acceptor_from_files(cert, key)?);
+        if let Ok(f) = std::fs::read(cert).map_err(|_| ()).and_then(|c| alarmant::tls::fingerprint_hex(&c).map_err(|_| ())) {
+            eprintln!("alarmant: serving HTTPS, certificate SHA-256 {f}");
+        }
     }
     let _public = public
         .bind(bind.to_string().as_str())
