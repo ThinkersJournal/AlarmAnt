@@ -1,0 +1,3 @@
+kind: Docs only: design note for a Synapse delivery channel (agent alarms)
+---
+`docs/SYNAPSE-CHANNEL.md` (PM task, CireSnave 2026-11-19): a separate no-socket process on the Synapse machine sends alarms to a Synapse role as ordinary mail and takes set/cancel/list requests as mail to the `alarmant` role; durable, per-setter and per-target quotas, audited without the text; uses the published `synapsed-client` (rc.123 published, rc.262 in the repo: a publish decision is open); says what AlarmAnt owns versus the AgentLife launcher; patent claim table with constraint 8 (US9686398B2) read and a fresh reading required before code. No code, nothing run, nothing live.
