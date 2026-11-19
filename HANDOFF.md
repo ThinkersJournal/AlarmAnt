@@ -12,6 +12,7 @@ IN FLIGHT:
 - Branch `synapse-channel-note` (worktree `AlarmAnt-wt-synnote`, pushed, NO PR): PM TASK [synapse-channel-reshaped] note `docs/SYNAPSE-CHANNEL.md`: agent->HUMAN paging only (mail to role `alarmant` -> existing alert; ack returns as mail via a new `GET /alert/:id`); NO alarm storage, NO agent-alarm path (the clock lives in Synapse); docs only, NO CODE before CireSnave reads it. Its PR rides the day AFTER the reenrol-void PR (one PR per UTC day): open ~11-21, [READY] to pm-assist cc pm-ants. Open items in the note: a patent reading is owed before any code (not run); synapsed-client version (rc.123 published, rc.262 in repo); coordinate with pm-platform only through pm-ants.
 
 WAIT: reenrol-void PR day (open the PR) | check: git ls-remote --heads origin reenrol-void | wake: 2026-11-20T00:10:00Z
+WAIT: synapse-channel note PR day, then patent reading PATENT-SYNAPSE-READING.md (Part B first), committed to pm-ants for 11-21..11-22 | check: git ls-remote --heads origin synapse-channel-note | wake: 2026-11-21T00:10:00Z
 
 NEXT, in order:
 1. On 11-20 UTC open the `reenrol-void` PR (above).
