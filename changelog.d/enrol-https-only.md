@@ -1,0 +1,3 @@
+kind: **BREAKING**: the Android app rejects `http://` enrolment links
+---
+`Registration.parseLink` now accepts only `https://` server addresses. The enrolment code, the FCM token and the ack token (a bearer for the phone's whole life) must not cross a network in the clear, and the manifest already forbids cleartext (`usesCleartextTraffic=false`), so an `http://` link could never have worked on a real phone. The unit test accepting an `http://` link now uses `https://`, and `http://h&c=abc` is added to the rejected links. Phone side only: server TLS (and certificate pinning) is a later change. Not run: no JDK here, so the Kotlin unit tests were not executed; CI is the check.

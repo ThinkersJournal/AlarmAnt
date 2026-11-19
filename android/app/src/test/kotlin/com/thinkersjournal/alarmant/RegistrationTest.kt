@@ -15,15 +15,15 @@ class RegistrationTest {
 
     @Test
     fun trailingSlashAndSurroundingSpaceAreTolerated() {
-        val got = Registration.parseLink("  alarmant://enroll?c=abc&u=http://10.0.0.5:8080/ \n")
-        assertEquals(Registration.Enrolment("http://10.0.0.5:8080", "abc"), got)
+        val got = Registration.parseLink("  alarmant://enroll?c=abc&u=https://10.0.0.5:8080/ \n")
+        assertEquals(Registration.Enrolment("https://10.0.0.5:8080", "abc"), got)
     }
 
     @Test
     fun malformedLinksAreRejected() {
         for (bad in listOf(
             "", "alarmant://enroll", "alarmant://enroll?u=http://h", "alarmant://enroll?c=abc",
-            "alarmant://enroll?u=ftp://h&c=abc", "alarmant://enroll?u=http://h&c=",
+            "alarmant://enroll?u=ftp://h&c=abc", "alarmant://enroll?u=http://h&c=abc","alarmant://enroll?u=http://h&c=",
             "https://enroll?u=http://h&c=abc", "alarmant://other?u=http://h&c=abc",
         )) assertNull(bad, Registration.parseLink(bad))
     }

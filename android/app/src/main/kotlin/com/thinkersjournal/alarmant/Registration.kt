@@ -21,7 +21,7 @@ object Registration {
 
     enum class Outcome { DONE, REJECTED, RETRY_LATER }
 
-    /** `alarmant://enroll?u=<base url>&c=<code>`; null for anything else. */
+    /** `alarmant://enroll?u=<https base url>&c=<code>`; null for anything else, `http://` included (the code and ack token must not cross in the clear). */
     fun parseLink(link: String): Enrolment? {
         val text = link.trim()
         val prefix = "alarmant://enroll?"
@@ -32,7 +32,7 @@ object Registration {
         }.toMap()
         val base = params["u"]?.trimEnd('/') ?: return null
         val code = params["c"] ?: return null
-        if (code.isEmpty() || !(base.startsWith("http://") || base.startsWith("https://"))) return null
+        if (code.isEmpty() || !base.startsWith("https://")) return null
         return Enrolment(base, code)
     }
 
