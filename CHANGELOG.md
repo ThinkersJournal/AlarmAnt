@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.11 — Escalation state and the PC-alarm board survive a restart
+
+The served app used an in-memory escalator, so a restart dropped every open alert's timer and the PC-alarm board. `PersistedEscalations` (`escalations.json`, PersistAnt atomic replace, a corrupt file refused not overwritten) now backs the escalator, and `App::with_escalations` resumes the open alerts and puts every alert already at the PC-alarm stage back on the board; `alarmant serve` uses it. A timer that came due while down fires one step on the next tick; the second app push is not repeated. Tests: records round-trip and an ack removes one, a corrupt file is refused, and a restart restores the board (checked failing with the re-seed removed). Rust tests: 183 pass locally; nothing run live.
+
 ## 0.2.10 — Android release signing and release workflow
 
 `assembleRelease` signs from `ALARMANT_KEYSTORE_*` environment variables when set (unsigned otherwise), and `.github/workflows/android-release.yml` builds and verifies a signed APK only on a pushed `android-v*` tag, keeping it as a workflow artifact. `ANDROID-RELEASE.md` lists the secrets and steps. Unverified: nothing has been run with a real keystore; the PR build proves only that the unsigned build still works.
