@@ -32,10 +32,14 @@ The bridge accepts a message only if **`urgency` is `high`, `to` is a human acco
 
 ### 3.2 What AlarmAnt sends back (draft, to be agreed with pm-platform through pm-ants)
 
-Preferred, if the daemon offers it: the bridge **acknowledges the original message on the human account's behalf** (a Synapse `ack` of `message_id`, with `by=<human account>`), so the sender sees an ordinary Synapse ack. That needs a grant letting role `alarmant` ack as the human endpoint: **question to the synapse lane**. Fallback, ordinary mail from `alarmant` to the original sender, MESSAGE-FORMATS style (one header, `note:` lines only if needed):
+Preferred, **only if the synapse lane finds it feasible** (pm-platform asked it): the bridge **acknowledges the original message on the human account's behalf** (a Synapse `ack` of `message_id`), so the sender sees an ordinary Synapse ack. This fits **only as a narrow grant**: `alarmant` may ack only messages addressed to the human account with `urgency=high`, every such ack audited with `via=alarmant`, and **never a general act-as**. **Until the synapse lane says that is feasible, the fallback mail below is the design.**
 
-    [ACKED v1] <subject> id=<message_id> by=<human account> at=<UTC>
-    [REFUSED v1] <subject> id=<message_id> code=<not-human|not-high|no-grant|sender-limit|open-limit|day-limit|too-long|no-device|server-down>
+Fallback, ordinary mail from `alarmant` to the original sender, in MESSAGE-FORMATS style. The header is a tag, **one bare subject word**, then `key=value` pairs whose values contain no spaces; the free-text subject goes on a `note:` line (draft; the daemon's L1 check must be run on these exact example messages before the build slice, and they have not been run yet):
+
+    [ACKED v1] page id=<message_id> by=<human account> at=<UTC>
+    note: <the original subject, at most 100 characters>
+
+    [REFUSED v1] page id=<message_id> code=<not-human|not-high|no-grant|sender-limit|open-limit|day-limit|too-long|no-device|server-down>
 
 Refusals say what, never echo the text. A page the human never acknowledges produces **no** message (silence): Synapse's own timeout and failover are what the sender sees (section 3.5).
 
@@ -44,7 +48,8 @@ Refusals say what, never echo the text. A page the human never acknowledges prod
 Ruling 1: *"Acknowledgement should always mean 'seen and being dealt with'... every place we can ack we should also be able to nack"*. AlarmAnt's Acknowledge button already means that: the human taps it and the alert ends. Two consequences:
 
 * **Receipt is Synapse's, never AlarmAnt's.** AlarmAnt does not read, record or forward "delivered", "seen" or any phone or PC fetch (PATENT-SWEEP constraint 13: the server never records a phone or PC fetch). The only thing that goes back is the Acknowledge.
-* **A nack on the phone conflicts with a standing constraint, and I will not add one without a decision.** PATENT-SWEEP constraint 13 says *the phone never sends a negative reply (not accepted, unavailable, busy, snooze) and the escalator never acts on a phone message* (US 2026/0360532 claim 19), and the PM's rule in HANDOFF repeats it: no Decline, no negative status. A "decline, pass it on" button is exactly that. **Recommendation: no nack on the phone.** A human who cannot take it ignores it; Synapse's failover (timeout) forwards it, and a deliberate decline is made from the terminal client or a Synapse reply, which is Synapse's own surface, not AlarmAnt's. **If CireSnave wants a phone Decline anyway, it needs a fresh patent reading of that claim first and his decision made with that in front of him** (question 10.1).
+* **Stated departure from CireSnave's ruling (PM 2026-11-20): no nack on the phone for now.** *"Every place we can ack we should also be able to nack"* is kept everywhere except the phone, because a phone nack conflicts with a standing constraint. The PM tells CireSnave this departs from his words, and **he may overrule it**; a phone nack waits for a read of US 2026/0360532 claim 19. A nack comes from the terminal client or a Synapse reply instead. The reason, in full:
+* **A nack on the phone conflicts with a standing constraint, and I will not add one without a decision.** PATENT-SWEEP constraint 13 says *the phone never sends a negative reply (not accepted, unavailable, busy, snooze) and the escalator never acts on a phone message* (US 2026/0360532 claim 19), and the PM's rule in HANDOFF repeats it: no Decline, no negative status. A "decline, pass it on" button is exactly that. **Ruled: no nack on the phone.** A human who cannot take it ignores it; Synapse's failover (timeout) forwards it, and a deliberate decline is made from the terminal client or a Synapse reply, which is Synapse's own surface, not AlarmAnt's. **If CireSnave overrules, a fresh patent reading of that claim comes first** (question 10.1).
 
 ### 3.4 Who may page a human, and how often
 
@@ -57,7 +62,7 @@ The brief gives the receiver the cap (*"each RECEIVER's policy caps them (remind
 
 ### 3.5 Chain, reminders and Synapse failover do not double up
 
-The adapter raises an ordinary alert, so AlarmAnt's chain (first app, second app after N minutes, PC alarm after 2N) and the phone's repeat-until-acknowledged run as today. The brief's failover (an un-acked message forwarded to the next receiver after a settable time) is Synapse's and runs on its own clock. **They can overlap**: Synapse could forward to a second receiver while AlarmAnt is still pushing to the second app. That is harmless but may be surprising. **Question 10.2:** should the failover timeout for a human-account message be longer than 3N (so AlarmAnt's own chain finishes first), or is a parallel forward wanted? Recommendation: longer than 3N by default, and the sender may shorten it.
+The adapter raises an ordinary alert, so AlarmAnt's chain (first app, second app after N minutes, PC alarm after 2N) and the phone's repeat-until-acknowledged run as today. The brief's failover (an un-acked message forwarded to the next receiver after a settable time) is Synapse's and runs on its own clock. **They can overlap**: Synapse could forward to a second receiver while AlarmAnt is still pushing to the second app. That is harmless but may be surprising. **Question 10.2:** should the failover timeout for a human-account message be longer than 3N (so AlarmAnt's own chain finishes first), or is a parallel forward wanted? Recommendation, which pm-platform's read of the brief agrees with: **the failover timeout for human-account mail is longer than 3N by default, and the sender may shorten it** (that is Synapse policy, set on the Synapse side).
 
 ### 3.6 The acknowledgement path
 
@@ -87,7 +92,7 @@ The adapter raises an ordinary alert, so AlarmAnt's chain (first app, second app
 |---|---|---|---|
 | **A: server-side dead-man** | the VPS (the phone server) | a **heartbeat** from the bridge | pages the phone **directly** through the normal alert path (Synapse and the PC are not involved) |
 | **B: PC-side check** | the bridge on the Synapse machine | the VPS server (`GET /health` answering fixed text) | sounds a local siren through `alarmant-pc` and writes a terminal notice; it cannot reach the phone without the server |
-| **C: an external dead-man** | a third party, outside both | pings from the VPS watchdog | notices when A **and** the VPS are both down, and sends the one message nobody else can: an email or SMS to CireSnave. **Not built unless he chooses it** (question 10.4): it is a third-party service and an account |
+| **C: an external dead-man** | a third-party heartbeat service (PM ruling 2026-11-20: **in the design**) | pings from the VPS watchdog and from the bridge | notices when A **and** the VPS, or the PC and the VPS, are down together, and pages **CireSnave's own phone with no AlarmAnt dependency** (section 5.6). Creating the account is CireSnave's, not the lane's |
 
 ### 5.1 What the bridge reports and how often
 
@@ -111,8 +116,28 @@ Fixed text, same alert path, same single priority (no levels): title `AlarmAnt w
 
 * The phone server already runs a **daily self-test** (A6) that exercises the chain; it stays and is the existing proof of the VPS path. A failed self-test goes to the failure notifier, which is not the phone.
 * Observer B proves the VPS is answering every minute; if it is not, the PC sounds and logs locally. Observer A is the VPS's own check of the PC, so each side watches the other.
-* **What neither covers:** the VPS and the PC down together, or the VPS down while the PC is off. Only observer C covers that. **State plainly: without C, a double failure is silent.** Whether to add C, and with which service, is CireSnave's decision (question 10.4).
+* **What A and B alone do not cover:** the VPS and the PC down together, or the VPS down while the PC is off. Only observer C covers that, and **until CireSnave has created its account and the pings are configured, a double failure is silent.** C is in the design; its activation is his (section 5.6).
 * The watchdog's own failures are audited (heartbeat route errors, key rejected, store unreadable), and a watchdog that cannot start refuses to start, loudly, rather than run blind.
+
+### 5.6 Observer C: the external dead-man
+
+**Shape.** Two **pings out**, both plain HTTPS GETs to a check URL: one from the VPS watchdog every minute, one from the bridge every minute. The service pages **only when pings stop**, which is exactly the one failure the rest cannot see. The URLs are secrets (anyone who has one can keep the check green): kept in files, never argv or logs, never in the repository. It has **no dependency on AlarmAnt, Synapse or the VPS** at the moment it pages, and it must page CireSnave's own phone by a path that is not the alarmant app.
+
+**Two checks, not one**, so the page says which side died: `alarmant-vps` (pinged by the watchdog) and `alarmant-pc` (pinged by the bridge). Grace period about 3 minutes each, matching 5.2.
+
+**Candidates**, from one round of third-party listings **that I could not check against the vendors' own pages** (prices and plans change; the account holder should confirm each on the vendor's site before choosing). What each needs is the same shape: an account, a check URL per check, and the channels below.
+
+| Service | Account and cost (unverified) | How it can page CireSnave's own phone (unverified) |
+|---|---|---|
+| **Healthchecks.io** (open source; a hosted free tier of about 20 checks is reported; paid tiers reported at $20 and $80 a month) | one account; the free tier looks enough for two checks | email, webhooks, SMS and phone call (some of these reported as paid features), and a **Pushover** integration. **CireSnave already uses Pushover as the stopgap in the ROADMAP**, so a Pushover emergency-priority page (which repeats until acknowledged) is the natural fit if the integration exposes that priority; **not verified** |
+| **Better Stack** (heartbeats on a free plan of about 10 monitors are reported) | one account | email and Slack on the free plan are reported; phone call and SMS appear to need paid on-call seats (about $29 a responder a month, reported); **not verified** |
+| **Cronitor** (a free tier of about 5 monitors is reported, conflicting listings) | one account | email and Slack reported; SMS reported as paid; phone call reported as not offered; **not verified** |
+| **Dead Man's Snitch** (a free plan with one check is reported; paid prices differ between listings) | one account; two checks may need a paid plan | not established |
+| **Self-hosted Healthchecks** | a small host that is **neither the VPS nor the PC**; cost and upkeep | the same channels as the hosted one, plus its own upkeep: a second thing to watch |
+
+**Recommendation (a proposal, not a decision):** Healthchecks.io hosted, two checks, paging through **Pushover emergency priority**, because it costs nothing reported, reuses an app CireSnave already has on his phone and does not depend on AlarmAnt; with an email channel as a second route. If the Pushover priority is not available on the free tier, the phone-call channel or a paid plan is the next step and is his to buy. **To confirm before relying on it:** the exact plan limits, that a check going silent triggers the Pushover emergency priority, and that a test page reaches his phone with the alarmant app uninstalled. A drill with the VPS and the bridge stopped is the proof, with his word, once.
+
+**What C does not do:** it knows only that pings stopped, not why; it carries no message text and no secret.
 
 ### 5.5 Watchdog threats
 
@@ -121,7 +146,8 @@ Fixed text, same alert path, same single priority (no levels): title `AlarmAnt w
 | Fake heartbeats keep a dead PC looking alive | a separate key kept in a file; rate-limited; fixed-shape body; a stolen key is a risk to name, bounded because it can only hold the page off (it cannot raise one or read anything) |
 | Fake outage pages | the route is key-checked; pages only follow missing or `down` heartbeats, and caps apply |
 | A page storm during a flap | 3-in-a-row to page and to clear, one open per component, a 30-minute quiet after an acknowledgement, 2 an hour overall |
-| The watchdog itself hangs | observer B and the daily self-test; C if chosen |
+| The watchdog itself hangs | observer B, the daily self-test, and observer C (once its account exists) |
+| A check URL leaks | anyone holding it can keep a dead system looking alive; the URLs are secrets kept in files; rotate them at the service if one is exposed |
 
 ## 6. Patent claim table and reading
 
@@ -157,8 +183,28 @@ No daemon was contacted and no mail sent. The `synapsed-client` API was read at 
 
 ## 10. Open questions
 
-For **CireSnave**: (1) a nack on the phone, no (my recommendation) or yes after a patent reading; (2) the failover timeout for a human-account message longer than 3N, or parallel; (3) the numbers in 3.4 and 5.2; (4) the external dead-man (C): yes, with which service, or accept that a double failure is silent; (5) a maintenance pause, yes or no.
+For **CireSnave**: (1) a nack on the phone, no (my recommendation) or yes after a patent reading; (2) the failover timeout for a human-account message longer than 3N, or parallel; (3) the numbers: **provisional defaults, all settable in config**, in the one table in section 11, for him to read with this note; (4) the external dead-man (C) is in the design by ruling; he chooses the service and creates the account (section 5.6), and the drill that proves it; (5) a maintenance pause, yes or no.
 
 For **pm-ants, pm-platform and the synapse lane**: (6) which `synapsed-client` version carries the new semantics and when it is published; (7) whether the daemon will let role `alarmant` ack as the human endpoint, or the fallback mail format (3.2) stands; (8) the envelope fields in 3.1 under MESSAGE-FORMATS, agreed through pm-ants; (9) a send grant from `alarmant` to itself for the canary; (10) who builds the **human terminal client** that the brief lists under the alarmant lane's step 5: it is outside this note and I have not designed it.
+
+## 11. Provisional defaults (one table; every value is a config setting)
+
+All are my starting values with no measurement behind them; CireSnave reads them with this note and may change any.
+
+| Setting | Default | Section |
+|---|---|---|
+| `POST /alert` per key: open / per hour / per day | 1 / 6 / 20 | 3.4, ROADMAP A10 |
+| `POST /alert` overall open | 3 | 3.4 |
+| Bridge per sender role: open / per day | 1 / 3 | 3.4 |
+| Ack poll interval, and how long an alert is followed | 20 seconds, 24 hours | 3.6 |
+| Heartbeat interval (bridge to server, and each external ping) | 60 seconds | 5.1, 5.6 |
+| Canary (bridge mails itself), and its allowed delay | every 5 minutes, 30 seconds | 5.1 |
+| Missed or bad heartbeats before a page, and good ones before clearing | 3 and 3 | 5.2 |
+| Quiet after a human acknowledges a watchdog page | 30 minutes | 5.2 |
+| Watchdog pages overall | 2 an hour | 5.2 |
+| Maintenance pause, maximum | 60 minutes | 5.2 |
+| Grace after a VPS restart | the missed-beat threshold (3 minutes) | 5.2 |
+| External check grace period | about 3 minutes | 5.6 |
+| Alert title, body and subject lengths | 100 and 1000 characters (existing limits) | 3.1 |
 
 — lane: alarmant
