@@ -15,5 +15,6 @@ Decision (PM 2026-11-13, option a): the server is the single writer. `alarmant e
 | A7 | Sideload (no Play Store fee) build and install notes | written (`android/SIDELOAD.md`, 0.0.46) | lane |
 | A8 | CI for the Android build, signed release artefact policy | open | lane; CireSnave for the signing key |
 | A9 | API for other projects to raise an alert (one small, documented call) | handler + docs built (0.0.27); HTTP route and key config built (0.0.45); device registration open (proposal: DESIGN-REGISTRATION.md) | lane |
+| A10 | **Defect, opened 2026-11-20 (pm-ants): `POST /alert` has no rate or count limit** (read in `raise.rs`, `serve.rs`, `routes.rs`; the only limiter in the repository is the failed-attempt one on `/register`), so any holder of an API key can raise alerts without bound. Fix, independent of the Synapse adapter and in the next code PR after #72: a per-key cap (proposal 1 open, 6 an hour, 20 a day; overall 3 open) with a fixed 429 and no push sent; red-first test: the N+1th alert inside the window is refused, and a second key held by the same sender cannot bypass it (the limit is keyed on the key's owner, one row per owner in config) | open | lane; numbers for CireSnave (via pm-ants) |
 
 Known risks: Android background killers and Do-Not-Disturb rules change every year; the self-test is the answer to silent failure.
