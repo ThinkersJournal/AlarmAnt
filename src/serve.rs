@@ -18,7 +18,7 @@ use crate::enroll::EnrollmentStore;
 use crate::escalate::Escalator;
 use crate::fcm::PushTransport;
 use crate::raise::{DeviceRegistry, response};
-use crate::ratelimit::AlertLimiter;
+use crate::ratelimit::{AlertLimiter, Decision};
 use crate::register::{DeviceStore, FailureLimiter};
 use crate::routes::{
     Clock, MAX_RAISE_BODY_BYTES, RegisterConfig, authorization, device_token_route, json_response,
@@ -167,12 +167,51 @@ where
                 .as_deref()
                 .and_then(bearer_token)
                 .is_some_and(|t| api_key.matches(t));
-            if authenticated && !alert_limiter.allow(crate::ratelimit::DEFAULT_OWNER, clock()) {
-                eprintln!("alarmant: alert refused (rate limit)");
-                return json_response(
-                    429,
-                    &serde_json::json!({"error": "too many alerts; try again later"}),
-                );
+            if authenticated {
+                let owner = crate::ratelimit::DEFAULT_OWNER;
+                let now = clock();
+                if let Decision::Refused {
+                    dropped,
+                    notice_due,
+                    clears_at,
+                } = alert_limiter.check(owner, now)
+                {
+                    // Never a silent loss (pm-ants): the refusal names the owner and the count in the
+                    // answer and on stderr, and the first one in an hour pages the human, exempt from the cap.
+                    eprintln!("alarmant: alert refused (rate limit) owner={owner} dropped={dropped}");
+                    if notice_due {
+                        let notice = serde_json::json!({
+                            "title": format!("Alerts throttled for key owner {owner}"),
+                            "body": format!(
+                                "More than the allowed number of alerts came in; later ones are dropped (not sent) until {}. Look at the sender.",
+                                crate::ratelimit::utc_hhmm(clears_at)
+                            ),
+                        })
+                        .to_string();
+                        let sent = raise_escalating(
+                            &escalator,
+                            &api_key,
+                            auth.as_deref(),
+                            &notice,
+                            &*devices,
+                            &*transport,
+                            &*alerts,
+                            now,
+                        )
+                        .await;
+                        if response(&sent).0 != 202 {
+                            eprintln!("alarmant: the throttle notice could not be raised");
+                        }
+                    }
+                    return json_response(
+                        429,
+                        &serde_json::json!({
+                            "error": "too many alerts; try again later",
+                            "owner": owner,
+                            "dropped": dropped,
+                        }),
+                    );
+                }
             }
             let Ok(bytes) = req.into_body().bytes(MAX_RAISE_BODY_BYTES).await else {
                 return json_response(413, &serde_json::json!({"error": "body too large"}));
@@ -450,10 +489,25 @@ mod tests {
             v["error"], "too many alerts; try again later",
             "fixed message"
         );
+        assert_eq!(v["owner"], "api", "the answer names the key owner");
+        assert_eq!(v["dropped"], 1, "and how many were lost");
+        // never silent: the FIRST refusal pages the human once (exempt from the cap), and the refused
+        // alert itself sends nothing
         assert_eq!(
             app.transport.0.lock().unwrap().len(),
-            pushes,
-            "a refused alert sends no push"
+            pushes + 1,
+            "one throttle notice"
+        );
+        // later refusals in the same hour send nothing more but keep counting
+        for n in 2..=4 {
+            let (st, v) = call(&base, "POST", "/alert", &good, body).await;
+            assert_eq!(st, 429);
+            assert_eq!(v["dropped"], n);
+        }
+        assert_eq!(
+            app.transport.0.lock().unwrap().len(),
+            pushes + 1,
+            "the human is paged once, not once per refusal"
         );
         // an hour later the hourly window has moved on
         now.store(10_000 + 3_601, Ordering::SeqCst);
