@@ -215,6 +215,7 @@ mod tests {
         register(
             &e,
             &d,
+            &a,
             &lim,
             Some(&format!("Bearer {code}")),
             r#"{"fcm_token":"t2"}"#,

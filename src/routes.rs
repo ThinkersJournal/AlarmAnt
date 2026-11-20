@@ -173,6 +173,7 @@ pub const MAX_REGISTER_BODY_BYTES: usize = 16 * 1024;
 pub struct RegisterConfig {
     pub enrollments: Arc<dyn EnrollmentStore>,
     pub devices: Arc<dyn DeviceStore>,
+    pub alerts: Arc<dyn AlertStore>,
     pub limiter: Arc<FailureLimiter>,
     pub clock: Clock,
 }
@@ -182,9 +183,10 @@ pub struct RegisterConfig {
 /// answer is never cached.
 pub fn register_route(server: Server, cfg: RegisterConfig) -> Server {
     server.post("/register", move |req: Request| {
-        let (enr, dev, lim, clock) = (
+        let (enr, dev, alerts, lim, clock) = (
             Arc::clone(&cfg.enrollments),
             Arc::clone(&cfg.devices),
+            Arc::clone(&cfg.alerts),
             Arc::clone(&cfg.limiter),
             Arc::clone(&cfg.clock),
         );
@@ -196,7 +198,7 @@ pub fn register_route(server: Server, cfg: RegisterConfig) -> Server {
             let Ok(text) = std::str::from_utf8(&bytes) else {
                 return json_response(400, &serde_json::json!({"error": "body is not UTF-8"}));
             };
-            let result = register(&*enr, &*dev, &lim, auth.as_deref(), text, clock());
+            let result = register(&*enr, &*dev, &*alerts, &lim, auth.as_deref(), text, clock());
             let (status, body) = register_response(&result);
             let mut res = json_response(status, &body);
             res.headers_mut()
@@ -514,6 +516,7 @@ mod tests {
             RegisterConfig {
                 enrollments: Arc::clone(&enr) as Arc<dyn EnrollmentStore>,
                 devices: Arc::clone(&dev) as Arc<dyn DeviceStore>,
+                alerts: Arc::new(crate::ack::MemoryStore::default()),
                 limiter: Arc::default(),
                 clock: Arc::new(|| 501),
             },

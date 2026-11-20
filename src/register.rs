@@ -17,7 +17,7 @@ use std::sync::Mutex;
 
 use serde_json::{Value, json};
 
-use crate::ack::{AckToken, bearer_token};
+use crate::ack::{AckToken, AlertStore, bearer_token};
 use crate::enroll::{Contact, EnrollmentStore};
 use crate::fcm::DeviceToken;
 use crate::raise::{Device, DeviceRegistry};
@@ -170,6 +170,9 @@ fn parse_fcm_token(body: &str) -> Result<String, RegisterError> {
     Ok(t.to_owned())
 }
 
+/// One registration at a time, so the replaced device read in [`register`] is the one swapped out.
+static REGISTER_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Handles `POST /register`; returns the new ack token, to be answered once.
 ///
 /// The body is checked before the code is spent, so a malformed request cannot waste a code; a 400
@@ -177,6 +180,7 @@ fn parse_fcm_token(body: &str) -> Result<String, RegisterError> {
 pub fn register(
     enrollments: &dyn EnrollmentStore,
     devices: &dyn DeviceStore,
+    alerts: &dyn AlertStore,
     limiter: &FailureLimiter,
     authorization: Option<&str>,
     body: &str,
@@ -196,6 +200,18 @@ pub fn register(
         });
     };
     let token = new_ack_token();
+    // One registration at a time, so the replaced device read here is the one that is swapped out.
+    let _one_at_a_time = REGISTER_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let replaced = match contact {
+        Contact::First => devices.device(),
+        Contact::Second => devices.second_device(),
+    };
+    // The new device is stored FIRST, then the old token is voided, the order `revoke_contact` uses:
+    // an alert raised from now on carries the new token, and an alert raised just before already holds
+    // the old one, which the void below reaches. (Voiding first would let an alert raised between the
+    // two steps carry the old token and escape the void for good.) The only window is the instant
+    // between the two calls, in which the old phone can still acknowledge an alert it already holds.
+    // Server-side only; nothing is sent to it and nothing is restored (PATENT-REGISTRATION-READING).
     devices.set_for(
         contact,
         Device {
@@ -203,6 +219,9 @@ pub fn register(
             ack_token: AckToken::new(&token),
         },
     );
+    if let Some(old) = replaced {
+        alerts.void_ack_tokens(&old.ack_token);
+    }
     Ok(token)
 }
 
@@ -273,6 +292,7 @@ mod tests {
     struct Rig {
         enr: MemoryEnrollments,
         dev: MemoryDevices,
+        alerts: crate::ack::MemoryStore,
         lim: FailureLimiter,
         code: String,
     }
@@ -284,13 +304,14 @@ mod tests {
         Rig {
             enr,
             dev: MemoryDevices::default(),
+            alerts: crate::ack::MemoryStore::default(),
             lim: FailureLimiter::default(),
             code,
         }
     }
 
     fn go(r: &Rig, auth: Option<&str>, body: &str, now: u64) -> Result<String, RegisterError> {
-        register(&r.enr, &r.dev, &r.lim, auth, body, now)
+        register(&r.enr, &r.dev, &r.alerts, &r.lim, auth, body, now)
     }
 
     fn bearer(c: &str) -> String {
@@ -301,6 +322,99 @@ mod tests {
         let r = rig();
         let token = go(&r, Some(&bearer(&r.code)), BODY, 1001).unwrap();
         (r, token)
+    }
+
+    fn in_flight(token: &str) -> crate::ack::AlertRecord {
+        crate::ack::AlertRecord {
+            alert_id: "a1".into(),
+            state: crate::AlertState::Sent,
+            sent_at: 0,
+            acked_at: None,
+            ack_token: AckToken::new(token),
+            second_ack_token: None,
+            text: None,
+        }
+    }
+
+    fn fresh_code(r: &Rig, now: u64) -> String {
+        let (code, e) = new_enrollment(now);
+        r.enr.set(e);
+        code
+    }
+
+    #[test]
+    fn re_enrolment_voids_the_replaced_phones_in_flight_ack_token_but_not_the_new_one() {
+        use crate::ack::{AckOutcome, acknowledge};
+        let (r, old) = registered();
+        r.alerts.insert(in_flight(&old));
+        let code = fresh_code(&r, 2000);
+        let new = go(&r, Some(&bearer(&code)), BODY, 2001).unwrap();
+        assert_ne!(old, new);
+        // The old phone can no longer stand the alert down; its token matches nothing.
+        let denied = acknowledge(&r.alerts, "a1", Some(&bearer(&old)), 2002);
+        assert_eq!(denied, AckOutcome::Unauthorized, "the old token must fail");
+        assert_eq!(r.alerts.get("a1").unwrap().state, crate::AlertState::Sent);
+        // The new phone's token is the one the registry holds now, and it still acknowledges.
+        assert!(r.dev.device().unwrap().ack_token.matches(&new));
+        let mut live = in_flight(&new);
+        live.alert_id = "a2".into();
+        r.alerts.insert(live);
+        assert_eq!(
+            acknowledge(&r.alerts, "a2", Some(&bearer(&new)), 2003),
+            AckOutcome::Acked
+        );
+    }
+
+    #[test]
+    fn a_first_enrolment_voids_nothing_on_an_alert_held_by_someone_else() {
+        let r = rig();
+        r.alerts.insert(in_flight("someone-elses-token"));
+        go(&r, Some(&bearer(&r.code)), BODY, 1001).unwrap();
+        let rec = r.alerts.get("a1").unwrap();
+        assert!(
+            rec.ack_token.matches("someone-elses-token"),
+            "nothing to replace, nothing voided"
+        );
+    }
+
+    /// Replacing one contact's phone leaves the other contact's token on the same alert working, and
+    /// replacing the second contact's phone voids only the second token.
+    #[test]
+    fn re_enrolling_one_contact_leaves_the_other_contacts_token_on_the_alert() {
+        let r = rig();
+        let first = go(&r, Some(&bearer(&r.code)), BODY, 1001).unwrap();
+        let (c2, e2) = crate::enroll::new_enrollment_for(Contact::Second, 1002);
+        r.enr.set(e2);
+        let second = go(&r, Some(&bearer(&c2)), BODY, 1003).unwrap();
+        let mut rec = in_flight(&first);
+        rec.second_ack_token = Some(AckToken::new(&second));
+        r.alerts.insert(rec);
+
+        // re-enrol the FIRST contact: the first token goes, the second stays
+        let (c1, e1) = crate::enroll::new_enrollment_for(Contact::First, 2000);
+        r.enr.set(e1);
+        go(&r, Some(&bearer(&c1)), BODY, 2001).unwrap();
+        let rec = r.alerts.get("a1").unwrap();
+        assert!(
+            !rec.ack_token.matches(&first),
+            "the replaced first phone's token is void"
+        );
+        assert!(
+            rec.second_ack_token.as_ref().unwrap().matches(&second),
+            "the second contact's token is untouched"
+        );
+
+        // re-enrol the SECOND contact: now the second token goes
+        let (c3, e3) = crate::enroll::new_enrollment_for(Contact::Second, 3000);
+        r.enr.set(e3);
+        go(&r, Some(&bearer(&c3)), BODY, 3001).unwrap();
+        let rec = r.alerts.get("a1").unwrap();
+        assert!(
+            !rec.second_ack_token
+                .as_ref()
+                .is_some_and(|t| t.matches(&second)),
+            "the replaced second phone's token is void"
+        );
     }
 
     fn put(r: &Rig, auth: Option<&str>, body: &str) -> Result<(), RegisterError> {

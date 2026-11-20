@@ -15,26 +15,43 @@ class RegistrationTest {
 
     @Test
     fun trailingSlashAndSurroundingSpaceAreTolerated() {
-        val got = Registration.parseLink("  alarmant://enroll?c=abc&u=http://10.0.0.5:8080/ \n")
-        assertEquals(Registration.Enrolment("http://10.0.0.5:8080", "abc"), got)
+        val got = Registration.parseLink("  alarmant://enroll?c=abc&u=https://10.0.0.5:8080/ \n")
+        assertEquals(Registration.Enrolment("https://10.0.0.5:8080", "abc"), got)
+    }
+
+    @Test
+    fun aPinInTheLinkIsCarriedAndAMalformedPinRejectsTheLink() {
+        val pin = "ab".repeat(32)
+        val got = Registration.parseLink("alarmant://enroll?u=https%3A%2F%2F10.0.0.5%3A8443&c=abc&f=$pin")
+        assertEquals(Registration.Enrolment("https://10.0.0.5:8443", "abc", pin), got)
+        assertNull(Registration.parseLink("alarmant://enroll?u=https://h&c=abc&f=nothex"))
+        assertNull(Registration.parseLink("alarmant://enroll?u=https://h&c=abc&f=" + "AB".repeat(32)))
+        assertNull(Registration.parseLink("alarmant://enroll?u=https://h&c=abc&f="))
+        assertNull(Registration.parseLink("alarmant://enroll?u=https://h&c=abc")!!.pin)
+    }
+
+    @Test
+    fun anOldHttpEnrolmentIsNotRegistered() {
+        assertFalse(Registration.isRegistered("http://10.0.0.5:8080", "tok"))
+        assertFalse(Registration.shouldUpdate("http://10.0.0.5:8080", "tok"))
     }
 
     @Test
     fun malformedLinksAreRejected() {
         for (bad in listOf(
             "", "alarmant://enroll", "alarmant://enroll?u=http://h", "alarmant://enroll?c=abc",
-            "alarmant://enroll?u=ftp://h&c=abc", "alarmant://enroll?u=http://h&c=",
+            "alarmant://enroll?u=ftp://h&c=abc", "alarmant://enroll?u=http://h&c=abc", "alarmant://enroll?u=http://h&c=",
             "https://enroll?u=http://h&c=abc", "alarmant://other?u=http://h&c=abc",
         )) assertNull(bad, Registration.parseLink(bad))
     }
 
     @Test
     fun registeredNeedsBothValues() {
-        assertTrue(Registration.isRegistered("http://h", "tok"))
+        assertTrue(Registration.isRegistered("https://h", "tok"))
         assertFalse(Registration.isRegistered(null, "tok"))
-        assertFalse(Registration.isRegistered("http://h", null))
+        assertFalse(Registration.isRegistered("https://h", null))
         assertFalse(Registration.isRegistered("", "tok"))
-        assertFalse(Registration.isRegistered("http://h", ""))
+        assertFalse(Registration.isRegistered("https://h", ""))
     }
 
     @Test
@@ -66,8 +83,8 @@ class TokenUpdateTest {
 
     @Test
     fun updatesAreOnlyAttemptedWhenRegistered() {
-        assertTrue(Registration.shouldUpdate("http://h", "tok"))
+        assertTrue(Registration.shouldUpdate("https://h", "tok"))
         assertFalse(Registration.shouldUpdate(null, "tok"))
-        assertFalse(Registration.shouldUpdate("http://h", null))
+        assertFalse(Registration.shouldUpdate("https://h", null))
     }
 }
