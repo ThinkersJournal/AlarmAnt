@@ -18,6 +18,7 @@ pub mod pcclient;
 pub mod persist;
 pub mod push;
 pub mod raise;
+pub mod ratelimit;
 pub mod register;
 pub mod revoke;
 pub mod routes;

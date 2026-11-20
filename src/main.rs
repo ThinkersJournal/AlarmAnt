@@ -5,7 +5,7 @@
 //! Environment for `serve`: `ALARMANT_BIND` (public address, required), `ALARMANT_DATA_DIR`,
 //! `ALARMANT_SERVICE_ACCOUNT_FILE`, `ALARMANT_API_KEY`, `ALARMANT_PC_KEY`, `ALARMANT_ADMIN_KEY` or
 //! `ALARMANT_ADMIN_KEY_FILE`, optional `ALARMANT_ADMIN_ADDR` (loopback, default 127.0.0.1:9100) and
-//! `ALARMANT_MINUTES` (default 5), and `ALARMANT_TLS_CERT_FILE` + `ALARMANT_TLS_KEY_FILE` (PEM; both or neither) to serve HTTPS itself.
+//! `ALARMANT_MINUTES` (default 5), `ALARMANT_RATE_PER_HOUR` and `ALARMANT_RATE_PER_DAY` (alerts a key owner may raise; default 6 and 20), and `ALARMANT_TLS_CERT_FILE` + `ALARMANT_TLS_KEY_FILE` (PEM; both or neither) to serve HTTPS itself.
 //! `ALARMANT_TLS_SELF_SIGNED_NAMES` (IPs and host names, comma-separated) instead makes a self-signed pair in the data directory. For `enroll`, `ALARMANT_PUBLIC_URL`
 //! (the `https://` address the phone uses) makes the client print the full enrol link, with the pin when a self-signed pair exists in `ALARMANT_DATA_DIR`. The client commands read the admin key and address the same way.
 
@@ -94,6 +94,24 @@ async fn client(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// The caps on `POST /alert`: `ALARMANT_RATE_PER_HOUR` and `ALARMANT_RATE_PER_DAY`, default 6 and 20 (ROADMAP A10).
+fn alert_limits() -> Result<alarmant::ratelimit::RateLimits, String> {
+    let mut l = alarmant::ratelimit::RateLimits::default();
+    for (name, slot) in [
+        ("ALARMANT_RATE_PER_HOUR", &mut l.per_hour),
+        ("ALARMANT_RATE_PER_DAY", &mut l.per_day),
+    ] {
+        if let Some(v) = env(name) {
+            *slot = v
+                .parse::<u32>()
+                .ok()
+                .filter(|n| *n > 0)
+                .ok_or_else(|| format!("{name} must be a whole number above 0"))?;
+        }
+    }
+    Ok(l)
+}
+
 async fn serve() -> Result<(), String> {
     let bind: SocketAddr = env("ALARMANT_BIND")
         .ok_or("ALARMANT_BIND is not set")?
@@ -139,7 +157,8 @@ async fn serve() -> Result<(), String> {
             minutes,
             Arc::clone(&clock),
         )
-        .with_escalations(minutes, Box::new(escalations)),
+        .with_escalations(minutes, Box::new(escalations))
+        .with_alert_limits(alert_limits()?),
     );
     let _admin = bind_loopback(
         admin_routes(

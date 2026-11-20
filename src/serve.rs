@@ -18,6 +18,7 @@ use crate::enroll::EnrollmentStore;
 use crate::escalate::Escalator;
 use crate::fcm::PushTransport;
 use crate::raise::{DeviceRegistry, response};
+use crate::ratelimit::AlertLimiter;
 use crate::register::{DeviceStore, FailureLimiter};
 use crate::routes::{
     Clock, MAX_RAISE_BODY_BYTES, RegisterConfig, authorization, device_token_route, json_response,
@@ -38,6 +39,8 @@ pub struct App<T, D> {
     pub dispatcher: Arc<Dispatcher>,
     pub board: Arc<PcAlarmBoard>,
     pub limiter: Arc<FailureLimiter>,
+    /// The cap on `POST /alert` (ROADMAP A10).
+    pub alert_limiter: Arc<AlertLimiter>,
     pub clock: Clock,
 }
 
@@ -66,12 +69,21 @@ impl<T, D> App<T, D> {
             dispatcher: Arc::new(Dispatcher::new(Arc::clone(&board))),
             board,
             limiter: Arc::new(FailureLimiter::default()),
+            alert_limiter: Arc::new(AlertLimiter::default()),
             clock,
         }
     }
 }
 
 impl<T, D> App<T, D> {
+    /// Replaces the caps on `POST /alert` (defaults: 6 an hour, 20 a day per key owner).
+    pub fn with_alert_limits(self, limits: crate::ratelimit::RateLimits) -> Self {
+        App {
+            alert_limiter: Arc::new(AlertLimiter::new(limits)),
+            ..self
+        }
+    }
+
     /// Replaces the in-memory escalator with one backed by `store`: open alerts resume (a timer that
     /// came due while down fires once on the next tick) and every alert already at the PC-alarm
     /// stage goes back on the board, so a restart does not silently end the chain. The second
@@ -129,24 +141,39 @@ where
     D: DeviceRegistry + 'static,
 {
     let api_key = Arc::new(app.api_key.clone());
-    let (devices, transport, alerts, escalator, clock) = (
+    let (devices, transport, alerts, escalator, clock, alert_limiter) = (
         Arc::clone(&app.devices),
         Arc::clone(&app.transport),
         Arc::clone(&app.alerts),
         Arc::clone(&app.escalator),
         Arc::clone(&app.clock),
+        Arc::clone(&app.alert_limiter),
     );
     server.post("/alert", move |req: Request| {
-        let (api_key, devices, transport, alerts, escalator, clock) = (
+        let (api_key, devices, transport, alerts, escalator, clock, alert_limiter) = (
             Arc::clone(&api_key),
             Arc::clone(&devices),
             Arc::clone(&transport),
             Arc::clone(&alerts),
             Arc::clone(&escalator),
             Arc::clone(&clock),
+            Arc::clone(&alert_limiter),
         );
         async move {
             let auth = authorization(&req).map(str::to_owned);
+            // The rate limit comes AFTER authentication: a stranger's request is the usual 401 and spends
+            // nobody's budget; only the key's owner is counted (ROADMAP A10). A refusal sends no push.
+            let authenticated = auth
+                .as_deref()
+                .and_then(bearer_token)
+                .is_some_and(|t| api_key.matches(t));
+            if authenticated && !alert_limiter.allow(crate::ratelimit::DEFAULT_OWNER, clock()) {
+                eprintln!("alarmant: alert refused (rate limit)");
+                return json_response(
+                    429,
+                    &serde_json::json!({"error": "too many alerts; try again later"}),
+                );
+            }
             let Ok(bytes) = req.into_body().bytes(MAX_RAISE_BODY_BYTES).await else {
                 return json_response(413, &serde_json::json!({"error": "body too large"}));
             };
@@ -283,6 +310,7 @@ mod tests {
     use crate::enroll::MemoryEnrollments;
     use crate::fcm::{AlertMessage, DeviceToken, PushError, PushReceipt};
     use crate::raise::Device;
+    use crate::ratelimit::RateLimits;
     use crate::register::MemoryDevices;
     use httpant_client::Client;
     use std::future::Future;
@@ -391,6 +419,45 @@ mod tests {
             st,
             serde_json::from_str(&t).unwrap_or(serde_json::Value::Null),
         )
+    }
+
+    /// ROADMAP A10: the N+1th alert inside the window is refused with a fixed message and sends no push;
+    /// a wrong key neither raises nor spends the budget; the window moves with the clock.
+    #[tokio::test]
+    async fn the_alert_endpoint_is_rate_limited_per_key() {
+        let now = Arc::new(AtomicU64::new(10_000));
+        let app = app(Arc::clone(&now));
+        let srv = public_server(&app).bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", srv.addr());
+        let good = format!("Bearer {KEY}");
+        let body = r#"{"title":"t","body":"b"}"#;
+        // a stranger's calls are 401 and never spend the owner's budget, however many there are
+        for _ in 0..30 {
+            assert_eq!(
+                call(&base, "POST", "/alert", "Bearer nope", body).await.0,
+                401
+            );
+        }
+        let per_hour = RateLimits::default().per_hour;
+        for i in 0..per_hour {
+            let (st, _) = call(&base, "POST", "/alert", &good, body).await;
+            assert_eq!(st, 202, "alert {i} is inside the window");
+        }
+        let pushes = app.transport.0.lock().unwrap().len();
+        let (st, v) = call(&base, "POST", "/alert", &good, body).await;
+        assert_eq!(st, 429, "the N+1th alert in the hour is refused");
+        assert_eq!(
+            v["error"], "too many alerts; try again later",
+            "fixed message"
+        );
+        assert_eq!(
+            app.transport.0.lock().unwrap().len(),
+            pushes,
+            "a refused alert sends no push"
+        );
+        // an hour later the hourly window has moved on
+        now.store(10_000 + 3_601, Ordering::SeqCst);
+        assert_eq!(call(&base, "POST", "/alert", &good, body).await.0, 202);
     }
 
     #[tokio::test]
