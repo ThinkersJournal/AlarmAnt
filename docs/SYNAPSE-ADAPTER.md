@@ -34,12 +34,15 @@ The bridge accepts a message only if **`urgency` is `high`, `to` is a human acco
 
 Preferred, **only if the synapse lane finds it feasible** (pm-platform asked it): the bridge **acknowledges the original message on the human account's behalf** (a Synapse `ack` of `message_id`), so the sender sees an ordinary Synapse ack. This fits **only as a narrow grant**: `alarmant` may ack only messages addressed to the human account with `urgency=high`, every such ack audited with `via=alarmant`, and **never a general act-as**. **Until the synapse lane says that is feasible, the fallback mail below is the design.**
 
-Fallback, ordinary mail from `alarmant` to the original sender, in MESSAGE-FORMATS style. The header is a tag, **one bare subject word**, then `key=value` pairs whose values contain no spaces; the free-text subject goes on a `note:` line (draft; the daemon's L1 check must be run on these exact example messages before the build slice, and they have not been run yet):
+Fallback, ordinary mail from `alarmant` to the original sender, in MESSAGE-FORMATS style: the header is a tag, **one bare subject word**, then `key=value` pairs whose values contain no spaces, and **the tag must be one of the v1 types** (STATUS, READY, MERGED, HOLD, ASK, TASK, NOTICE, FINDING, FIX). The earlier draft of this note used new tags `[ACKED v1]` and `[REFUSED v1]`; **they failed the daemon's check** (see below), so the replies are `[NOTICE]` with the topic as the subject word and the free text on `note:` lines:
 
-    [ACKED v1] page id=<message_id> by=<human account> at=<UTC>
-    note: <the original subject, at most 100 characters>
+    [NOTICE] page-acked affects=<original sender> when=<UTC> action=none
+    note: id=<message_id> by=<human account>. Original subject: <at most 100 characters>
 
-    [REFUSED v1] page id=<message_id> code=<not-human|not-high|no-grant|sender-limit|open-limit|day-limit|too-long|no-device|server-down>
+    [NOTICE] page-refused affects=<original sender> when=<UTC> action=none
+    note: id=<message_id> code=<not-human|not-high|no-grant|sender-limit|open-limit|day-limit|too-long|no-device|server-down>
+
+**L1 check, run 2026-11-20 against the live daemon** by sending each example through the Synapse send tool with `mode` `L1:message-formats/1` (to this lane's own role, so no other role received them): **the first draft, `[ACKED v1] page ...` and `[REFUSED v1] page ...`, 0 of 2 valid** (`not_message_format: [TYPE] is not a v1 type`); **the two `[NOTICE]` forms above, 2 of 2 valid**. What was not checked: the inbound envelope in 3.1 (the daemon, not this lane, defines it), and the real message with a real subject and ids (the examples used a made-up id and subject). The two accepted messages were delivered to this lane's own mailbox and acknowledged.
 
 Refusals say what, never echo the text. A page the human never acknowledges produces **no** message (silence): Synapse's own timeout and failover are what the sender sees (section 3.5).
 
@@ -135,7 +138,7 @@ Fixed text, same alert path, same single priority (no levels): title `AlarmAnt w
 | **Dead Man's Snitch** (a free plan with one check is reported; paid prices differ between listings) | one account; two checks may need a paid plan | not established |
 | **Self-hosted Healthchecks** | a small host that is **neither the VPS nor the PC**; cost and upkeep | the same channels as the hosted one, plus its own upkeep: a second thing to watch |
 
-**Recommendation (a proposal, not a decision):** Healthchecks.io hosted, two checks, paging through **Pushover emergency priority**, because it costs nothing reported, reuses an app CireSnave already has on his phone and does not depend on AlarmAnt; with an email channel as a second route. If the Pushover priority is not available on the free tier, the phone-call channel or a paid plan is the next step and is his to buy. **To confirm before relying on it:** the exact plan limits, that a check going silent triggers the Pushover emergency priority, and that a test page reaches his phone with the alarmant app uninstalled. A drill with the VPS and the bridge stopped is the proof, with his word, once.
+**No service is chosen here.** It is CireSnave's account and call; the table is only what a choice has to weigh, and every cell is unverified. One observation for him, not a recommendation: the ROADMAP's stopgap is already Pushover emergency priority on his phone, so a service that can page through Pushover would not need the alarmant app at all; whether any listed service can, at which plan, is for him to confirm on the vendor's page. **Whatever he picks, three things must be confirmed before it is relied on:** the exact plan limits, that a check going silent triggers a page to his own phone, and that a test page arrives with the alarmant app uninstalled. A drill with the VPS and the bridge stopped is the proof, with his word, once.
 
 **What C does not do:** it knows only that pings stopped, not why; it carries no message text and no secret.
 
@@ -183,7 +186,7 @@ No daemon was contacted and no mail sent. The `synapsed-client` API was read at 
 
 ## 10. Open questions
 
-For **CireSnave**: (1) a nack on the phone, no (my recommendation) or yes after a patent reading; (2) the failover timeout for a human-account message longer than 3N, or parallel; (3) the numbers: **provisional defaults, all settable in config**, in the one table in section 11, for him to read with this note; (4) the external dead-man (C) is in the design by ruling; he chooses the service and creates the account (section 5.6), and the drill that proves it; (5) a maintenance pause, yes or no.
+For **CireSnave**: (1) a nack on the phone, no (my recommendation) or yes after a patent reading; (2) the failover timeout for a human-account message longer than 3N, or parallel; (3) the numbers: **provisional defaults, all settable in config**, in the one table in section 11, for him to read with this note; (4) the external dead-man (C) is in the design by ruling; he chooses the service and creates the account (section 5.6), and says when to run the drill that proves it; (5) a maintenance pause, yes or no.
 
 For **pm-ants, pm-platform and the synapse lane**: (6) which `synapsed-client` version carries the new semantics and when it is published; (7) whether the daemon will let role `alarmant` ack as the human endpoint, or the fallback mail format (3.2) stands; (8) the envelope fields in 3.1 under MESSAGE-FORMATS, agreed through pm-ants; (9) a send grant from `alarmant` to itself for the canary; (10) who builds the **human terminal client** that the brief lists under the alarmant lane's step 5: it is outside this note and I have not designed it.
 
