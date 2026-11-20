@@ -32,6 +32,8 @@ pub enum PcError {
     Refused,
     /// The base address is not https (or http on loopback).
     InsecureBase,
+    /// The server certificate file holds no usable certificate.
+    BadCertificate,
 }
 
 impl fmt::Display for PcError {
@@ -40,6 +42,7 @@ impl fmt::Display for PcError {
             PcError::Unreachable => "the server could not be reached",
             PcError::Refused => "the server refused the PC key",
             PcError::InsecureBase => "the server address must be https (http only on loopback)",
+            PcError::BadCertificate => "the server certificate file holds no usable certificate",
         })
     }
 }
@@ -70,6 +73,7 @@ pub fn base_allowed(base: &str) -> bool {
 pub struct PcClient {
     base: String,
     key: String,
+    client: Client,
 }
 
 impl fmt::Debug for PcClient {
@@ -88,12 +92,26 @@ impl PcClient {
         Ok(PcClient {
             base: base.trim_end_matches('/').to_owned(),
             key: key.to_owned(),
+            client: Client::new(),
         })
+    }
+
+    /// Like [`PcClient::new`], also trusting the certificate(s) in `server_cert_pem`: for a server that
+    /// serves a self-signed certificate (a home LAN, `ALARMANT_TLS_SELF_SIGNED_NAMES`). The PEM is the
+    /// server's own `tls-cert.pem`, copied to this PC over a channel the operator trusts; it adds to the
+    /// default roots and replaces nothing. A PEM with no certificate is refused.
+    pub fn trusting(base: &str, key: &str, server_cert_pem: &[u8]) -> Result<Self, PcError> {
+        let mut c = PcClient::new(base, key)?;
+        c.client = Client::builder()
+            .add_root_pem(server_cert_pem)
+            .build()
+            .map_err(|_| PcError::BadCertificate)?;
+        Ok(c)
     }
 
     /// Alert ids whose PC alarm should be sounding now.
     pub async fn active(&self) -> Result<Vec<String>, PcError> {
-        let res = Client::new()
+        let res = self.client
             .get(format!("{}/pc/alarm", self.base))
             .header("authorization", format!("Bearer {}", self.key))
             .send()
@@ -120,7 +138,7 @@ impl PcClient {
 
     /// The operator's Acknowledge for one alert.
     pub async fn acknowledge(&self, alert_id: &str) -> Result<(), PcError> {
-        let res = Client::new()
+        let res = self.client
             .post(format!("{}/pc/ack/{alert_id}", self.base))
             .header("authorization", format!("Bearer {}", self.key))
             .send()
@@ -197,6 +215,40 @@ mod tests {
         fn stop(&mut self) {
             self.0.lock().unwrap().push("stop");
         }
+    }
+
+    /// A real TLS handshake: a server with a self-signed certificate is reached only by a client that was
+    /// given that certificate, and a different certificate is refused.
+    #[tokio::test]
+    async fn a_self_signed_server_is_trusted_only_with_its_own_certificate() {
+        use crate::ack::MemoryStore;
+        use crate::channel::{PcAlarmBoard, PcAlarmConfig, pc_alarm_route};
+        let made = rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_owned()]).unwrap();
+        let (cert, key) = (made.cert.pem(), made.signing_key.serialize_pem());
+        let acceptor = crate::tls::acceptor(cert.as_bytes(), key.as_bytes()).unwrap();
+        let server = pc_alarm_route(
+            httpant_server::Server::new(),
+            PcAlarmConfig {
+                pc_key: crate::ack::AckToken::new("pc-key-0123456789abcdef0123456789abcdef"),
+                board: Arc::new(PcAlarmBoard::default()),
+                alerts: Arc::new(MemoryStore::default()),
+            },
+        )
+        .tls(acceptor)
+        .bind("127.0.0.1:0")
+        .await
+        .unwrap();
+        let base = format!("https://{}", server.addr());
+        let key = "pc-key-0123456789abcdef0123456789abcdef";
+        let trusting = PcClient::trusting(&base, key, cert.as_bytes()).unwrap();
+        assert_eq!(trusting.active().await, Ok(vec![]));
+        // control: the same server, a client that was not given the certificate
+        assert_eq!(PcClient::new(&base, key).unwrap().active().await, Err(PcError::Unreachable));
+        // another certificate is not this server's
+        let other = rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_owned()]).unwrap().cert.pem();
+        let wrong = PcClient::trusting(&base, key, other.as_bytes()).unwrap();
+        assert_eq!(wrong.active().await, Err(PcError::Unreachable));
+        assert_eq!(PcClient::trusting(&base, key, b"not pem").err(), Some(PcError::BadCertificate));
     }
 
     fn ids(v: &[&str]) -> Result<Vec<String>, PcError> {

@@ -48,43 +48,82 @@ pub fn fingerprint_hex(chain_pem: &[u8]) -> Result<String, &'static str> {
 
 const SELF_CERT: &str = "tls-cert.pem";
 const SELF_KEY: &str = "tls-key.pem";
+const SELF_NAMES: &str = "tls-names.txt";
 
-/// The self-signed pair in `dir`: reused when both files exist, created (with every name as a
-/// subject alternative name, IPs as IP entries) when neither does. Returns the two file paths.
-pub fn self_signed_in(dir: &std::path::Path, names: &str) -> Result<(String, String), &'static str> {
-    let cert = dir.join(SELF_CERT);
-    let key = dir.join(SELF_KEY);
-    match (cert.exists(), key.exists()) {
-        (true, true) => {}
-        (false, false) => {
-            let names: Vec<String> = names
-                .split(',')
-                .map(|n| n.trim().to_owned())
-                .filter(|n| !n.is_empty())
-                .collect();
-            if names.is_empty() {
-                return Err("ALARMANT_TLS_SELF_SIGNED_NAMES lists no name");
-            }
-            let made = rcgen::generate_simple_self_signed(names)
-                .map_err(|_| "a self-signed certificate could not be made")?;
-            write_private(&key, made.signing_key.serialize_pem().as_bytes())?;
-            std::fs::write(&cert, made.cert.pem()).map_err(|_| "the certificate could not be written")?;
-        }
-        _ => return Err("only one of tls-cert.pem and tls-key.pem exists in the data directory"),
-    }
-    let s = |p: std::path::PathBuf| p.to_str().map(str::to_owned).ok_or("the data directory path is not text");
-    Ok((s(cert)?, s(key)?))
+/// The names as a sorted, de-duplicated list (so a reordered variable is not a change).
+fn name_list(names: &str) -> Vec<String> {
+    let mut v: Vec<String> = names
+        .split(',')
+        .map(|n| n.trim().to_owned())
+        .filter(|n| !n.is_empty())
+        .collect();
+    v.sort();
+    v.dedup();
+    v
 }
 
-fn write_private(path: &std::path::Path, bytes: &[u8]) -> Result<(), &'static str> {
+/// Writes `bytes` to `path` through a temporary file and a rename, so a crash never leaves a
+/// half-written file at `path`. The key file is created owner-only on Unix; on Windows it
+/// inherits the data directory's permissions, so that directory must be private to the operator.
+fn write_atomic(path: &std::path::Path, bytes: &[u8], private: bool) -> Result<(), &'static str> {
     use std::io::Write;
+    let tmp = path.with_extension("tmp");
+    let _ = std::fs::remove_file(&tmp);
     let mut o = std::fs::OpenOptions::new();
     o.write(true).create_new(true);
     #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
-    o.open(path)
-        .and_then(|mut f| f.write_all(bytes))
-        .map_err(|_| "the private key could not be written")
+    if private {
+        std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
+    }
+    #[cfg(not(unix))]
+    let _ = private;
+    o.open(&tmp)
+        .and_then(|mut f| f.write_all(bytes).and_then(|()| f.sync_all()))
+        .and_then(|()| std::fs::rename(&tmp, path))
+        .map_err(|_| {
+            let _ = std::fs::remove_file(&tmp);
+            "a TLS file could not be written to the data directory"
+        })
+}
+
+/// The self-signed pair in `dir`, for exactly `names` (IPs become IP subject alternative names).
+///
+/// * Complete pair for the same names: reused, so the fingerprint and every phone's pin stay valid.
+/// * Complete pair for **different** names: refused with a message that says what to delete, never
+///   served silently with a certificate the phone's hostname check will reject.
+/// * Nothing, or an interrupted earlier run (the certificate is written last, so a missing
+///   certificate means the run did not finish): a new pair is made.
+/// * A certificate without its key: refused (it cannot be repaired from here).
+///
+/// Returns the two file paths.
+pub fn self_signed_in(dir: &std::path::Path, names: &str) -> Result<(String, String), &'static str> {
+    let cert = dir.join(SELF_CERT);
+    let key = dir.join(SELF_KEY);
+    let names_file = dir.join(SELF_NAMES);
+    let wanted = name_list(names);
+    if wanted.is_empty() {
+        return Err("ALARMANT_TLS_SELF_SIGNED_NAMES lists no name");
+    }
+    if cert.exists() {
+        if !key.exists() {
+            return Err("tls-cert.pem exists without tls-key.pem: delete tls-cert.pem to make a new pair (phones must enrol again)");
+        }
+        let had = std::fs::read_to_string(&names_file).map(|t| name_list(&t.replace('\n', ",")));
+        if had.as_deref().ok() != Some(wanted.as_slice()) {
+            return Err("ALARMANT_TLS_SELF_SIGNED_NAMES differs from the names the certificate was made for: delete tls-cert.pem, tls-key.pem and tls-names.txt to make a new pair (phones must enrol again)");
+        }
+    } else {
+        // Nothing yet, or an interrupted run: start clean.
+        let _ = std::fs::remove_file(&key);
+        let _ = std::fs::remove_file(&names_file);
+        let made = rcgen::generate_simple_self_signed(wanted.clone())
+            .map_err(|_| "a self-signed certificate could not be made")?;
+        write_atomic(&key, made.signing_key.serialize_pem().as_bytes(), true)?;
+        write_atomic(&names_file, wanted.join("\n").as_bytes(), false)?;
+        write_atomic(&cert, made.cert.pem().as_bytes(), false)?; // last: its presence means complete
+    }
+    let s = |p: std::path::PathBuf| p.to_str().map(str::to_owned).ok_or("the data directory path is not text");
+    Ok((s(cert)?, s(key)?))
 }
 
 /// `alarmant://enroll?u=<base>&c=<code>[&f=<sha256 hex>]`, with the base URL percent-encoded.
@@ -102,6 +141,31 @@ pub fn enrol_link(base: &str, code: &str, fingerprint: Option<&str>) -> String {
         link.push_str(f);
     }
     link
+}
+
+/// The enrolment code in the admin reply: the one line that is exactly 32 lowercase hex digits
+/// (not a position in the text, so a reworded reply cannot make the link carry the wrong line).
+pub fn code_in_reply(text: &str) -> Option<&str> {
+    text.lines()
+        .map(str::trim)
+        .find(|l| l.len() == 32 && l.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+}
+
+/// The enrol link for the operator: `base` must be `https://`; the pin is added only when
+/// `self_signed_dir` is given and holds the pair the server serves.
+pub fn link_for(base: &str, code: &str, self_signed_dir: Option<&std::path::Path>) -> Result<String, String> {
+    if !base.starts_with("https://") {
+        return Err("ALARMANT_PUBLIC_URL must be an https:// address (the phone rejects anything else)".to_owned());
+    }
+    let pin = match self_signed_dir {
+        None => None,
+        Some(dir) => {
+            let pem = std::fs::read(dir.join(SELF_CERT))
+                .map_err(|_| "ALARMANT_TLS_SELF_SIGNED_NAMES is set but tls-cert.pem cannot be read from ALARMANT_DATA_DIR".to_owned())?;
+            Some(fingerprint_hex(&pem).map_err(str::to_owned)?)
+        }
+    };
+    Ok(enrol_link(base, code, pin.as_deref()))
 }
 
 /// Read both files and build the acceptor.
@@ -137,7 +201,7 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let (c1, k1) = self_signed_in(d.path(), "127.0.0.1, alarmant.test").unwrap();
         let f1 = fingerprint_hex(&std::fs::read(&c1).unwrap()).unwrap();
-        let (c2, _) = self_signed_in(d.path(), "other.example").unwrap();
+        let (c2, _) = self_signed_in(d.path(), "alarmant.test,127.0.0.1").unwrap();
         assert_eq!(f1, fingerprint_hex(&std::fs::read(&c2).unwrap()).unwrap());
         assert!(acceptor_from_files(&c1, &k1).is_ok());
         // the IP name is an IP subject alternative name (4 raw bytes in the DER), not only text
@@ -147,11 +211,48 @@ mod tests {
     }
 
     #[test]
-    fn half_a_pair_or_no_names_is_refused() {
+    fn no_names_or_a_certificate_without_its_key_is_refused() {
         let d = tempfile::tempdir().unwrap();
         assert!(self_signed_in(d.path(), " , ").is_err());
         std::fs::write(d.path().join("tls-cert.pem"), "x").unwrap();
         assert!(self_signed_in(d.path(), "a.test").is_err());
+    }
+
+    #[test]
+    fn a_key_left_by_an_interrupted_run_is_replaced_not_fatal() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("tls-key.pem"), "half written").unwrap();
+        std::fs::write(d.path().join("tls-names.txt"), "stale").unwrap();
+        let (c, k) = self_signed_in(d.path(), "a.test").unwrap();
+        assert!(acceptor_from_files(&c, &k).is_ok());
+        assert!(!d.path().join("tls-cert.tmp").exists());
+    }
+
+    #[test]
+    fn changed_names_are_refused_not_served_with_the_old_certificate() {
+        let d = tempfile::tempdir().unwrap();
+        self_signed_in(d.path(), "192.168.1.10, b.test").unwrap();
+        // same set in another order and spacing: reused
+        assert!(self_signed_in(d.path(), "b.test,192.168.1.10").is_ok());
+        let e = self_signed_in(d.path(), "192.168.1.20").unwrap_err();
+        assert!(e.contains("differs") && e.contains("delete"));
+    }
+
+    #[test]
+    fn the_code_is_found_by_shape_not_by_line_position() {
+        let code = "0123456789abcdef0123456789abcdef";
+        let reply = format!("Enrolment code (shown once, valid 10 minutes, usable once):
+{code}
+");
+        assert_eq!(code_in_reply(&reply), Some(code));
+        assert_eq!(code_in_reply(&format!("a note first
+and another
+  {code}  
+")), Some(code));
+        assert_eq!(code_in_reply("Device removed.
+No code here
+"), None);
+        assert_eq!(code_in_reply("0123456789ABCDEF0123456789abcdef"), None);
     }
 
     #[test]
@@ -161,6 +262,19 @@ mod tests {
             "alarmant://enroll?u=https%3A%2F%2F10.0.0.5%3A8443&c=abc"
         );
         assert!(enrol_link("https://h", "abc", Some("ff")).ends_with("&c=abc&f=ff"));
+    }
+
+    #[test]
+    fn the_operator_link_needs_https_and_pins_only_a_self_signed_pair() {
+        let d = tempfile::tempdir().unwrap();
+        let (c, _) = self_signed_in(d.path(), "10.0.0.5").unwrap();
+        let f = fingerprint_hex(&std::fs::read(c).unwrap()).unwrap();
+        let pinned = link_for("https://10.0.0.5:8443", "abc", Some(d.path())).unwrap();
+        assert!(pinned.ends_with(&format!("&f={f}")));
+        // a real certificate: a stale tls-cert.pem in the directory is ignored
+        assert!(!link_for("https://h.example", "abc", None).unwrap().contains("&f="));
+        assert!(link_for("http://h", "abc", None).is_err());
+        assert!(link_for("https://h", "abc", Some(tempfile::tempdir().unwrap().path())).is_err());
     }
 
     #[test]

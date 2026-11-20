@@ -75,13 +75,15 @@ async fn client(args: &[String]) -> Result<(), String> {
     if let (true, Some(base), Some(code)) = (
         matches!(command, alarmant::admin::Command::Enroll(_)),
         env("ALARMANT_PUBLIC_URL"),
-        text.lines().nth(1),
+        alarmant::tls::code_in_reply(&text),
     ) {
-        let pin = env("ALARMANT_DATA_DIR")
-            .and_then(|d| std::fs::read(Path::new(&d).join("tls-cert.pem")).ok())
-            .and_then(|c| alarmant::tls::fingerprint_hex(&c).ok());
+        // The pin comes from the self-signed pair only when the server is configured to make one
+        // (the same variable the server reads); a real certificate is never pinned.
+        let self_signed_dir = env("ALARMANT_TLS_SELF_SIGNED_NAMES")
+            .and_then(|_| env("ALARMANT_DATA_DIR"));
+        let link = alarmant::tls::link_for(&base, code, self_signed_dir.as_deref().map(Path::new))?;
         println!("Link for the phone:
-{}", alarmant::tls::enrol_link(&base, code, pin.as_deref()));
+{link}");
     }
     Ok(())
 }

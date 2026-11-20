@@ -3,7 +3,6 @@ package com.thinkersjournal.alarmant
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import java.net.HttpURLConnection
 import java.net.URL
 
 /**
@@ -20,6 +19,8 @@ class AckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
         val base = config.getString("ack_base_url", null) ?: return Result.retry()
         val token = config.getString("device_token", null) ?: return Result.retry()
         val pin = config.getString("ack_pin", null)
+        // An address stored by an older http enrolment can never work (cleartext is blocked): stop, do not retry for ever.
+        if (!base.startsWith("https://")) return Result.failure()
         return try {
             val conn = PinnedTls.open(URL("$base/ack/$alertId"), pin)
             try {
@@ -35,6 +36,8 @@ class AckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
             } finally {
                 conn.disconnect()
             }
+        } catch (_: IllegalArgumentException) {
+            Result.failure() // an unusable stored pin: retrying cannot help; the alarm already stopped locally
         } catch (_: java.io.IOException) {
             Result.retry()
         }

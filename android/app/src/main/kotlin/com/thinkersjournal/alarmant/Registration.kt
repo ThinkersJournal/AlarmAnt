@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.core.content.edit
 import org.json.JSONObject
 import java.io.IOException
-import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLDecoder
 
@@ -38,7 +37,9 @@ object Registration {
         return Enrolment(base, code, pin)
     }
 
-    fun isRegistered(baseUrl: String?, token: String?) = !baseUrl.isNullOrEmpty() && !token.isNullOrEmpty()
+    /** Registered needs an `https://` sender address: an enrolment made over `http://` (before 0.3.0) is no longer usable and must be redone. */
+    fun isRegistered(baseUrl: String?, token: String?) =
+        !baseUrl.isNullOrEmpty() && baseUrl.startsWith("https://") && !token.isNullOrEmpty()
 
     fun isRegistered(context: Context): Boolean {
         val config = context.getSharedPreferences("config", Context.MODE_PRIVATE)
@@ -91,6 +92,9 @@ object Registration {
             } finally {
                 conn.disconnect()
             }
+        } catch (_: IllegalArgumentException) {
+            // An unusable stored pin or address: nothing to retry, re-enrol (PinnedTls.open refuses it).
+            Outcome.REJECTED
         } catch (_: IOException) {
             Outcome.RETRY_LATER
         }
@@ -123,6 +127,9 @@ object Registration {
             } finally {
                 conn.disconnect()
             }
+        } catch (_: IllegalArgumentException) {
+            // An unusable stored pin or address: nothing to retry, re-enrol (PinnedTls.open refuses it).
+            Outcome.REJECTED
         } catch (_: IOException) {
             Outcome.RETRY_LATER
         }
