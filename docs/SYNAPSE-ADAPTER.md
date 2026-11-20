@@ -196,7 +196,9 @@ All are my starting values with no measurement behind them; CireSnave reads them
 
 | Setting | Default | Section |
 |---|---|---|
-| `POST /alert` per key: open / per hour / per day | 1 / 6 / 20 | 3.4, ROADMAP A10 |
+| `POST /alert` per key owner: raised per hour / per day (built on branch `alert-rate-limit`, ROADMAP A10; `ALARMANT_RATE_PER_HOUR`, `ALARMANT_RATE_PER_DAY`) | 6 / 20 | 3.4, ROADMAP A10 |
+| `POST /alert` per key owner: open alerts at once (**proposed here, not in the A10 code**) | 1 | 3.4 |
+| Throttle notice to the human: first refusal per owner, then at most one per | 1 hour (exempt from the cap) | 3.4, ROADMAP A10 |
 | `POST /alert` overall open | 3 | 3.4 |
 | Bridge per sender role: open / per day | 1 / 3 | 3.4 |
 | Ack poll interval, and how long an alert is followed | 20 seconds, 24 hours | 3.6 |
