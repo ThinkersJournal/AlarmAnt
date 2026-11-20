@@ -24,6 +24,7 @@ pub mod routes;
 pub mod second;
 pub mod selftest;
 pub mod serve;
+pub mod tls;
 pub mod wire;
 
 /// Where an alert stands. Flat chain: person 1, then person 2, no third tier.

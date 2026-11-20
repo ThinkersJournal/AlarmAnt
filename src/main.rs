@@ -5,7 +5,9 @@
 //! Environment for `serve`: `ALARMANT_BIND` (public address, required), `ALARMANT_DATA_DIR`,
 //! `ALARMANT_SERVICE_ACCOUNT_FILE`, `ALARMANT_API_KEY`, `ALARMANT_PC_KEY`, `ALARMANT_ADMIN_KEY` or
 //! `ALARMANT_ADMIN_KEY_FILE`, optional `ALARMANT_ADMIN_ADDR` (loopback, default 127.0.0.1:9100) and
-//! `ALARMANT_MINUTES` (default 5). The client commands read the admin key and address the same way.
+//! `ALARMANT_MINUTES` (default 5), and `ALARMANT_TLS_CERT_FILE` + `ALARMANT_TLS_KEY_FILE` (PEM; both or neither) to serve HTTPS itself.
+//! `ALARMANT_TLS_SELF_SIGNED_NAMES` (IPs and host names, comma-separated) instead makes a self-signed pair in the data directory. For `enroll`, `ALARMANT_PUBLIC_URL`
+//! (the `https://` address the phone uses) makes the client print the full enrol link, with the pin when a self-signed pair exists in `ALARMANT_DATA_DIR`. The client commands read the admin key and address the same way.
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -70,6 +72,25 @@ async fn client(args: &[String]) -> Result<(), String> {
         .await
         .map_err(|e| e.message().to_owned())?;
     print!("{text}");
+    if let (true, Some(base), Some(code)) = (
+        matches!(command, alarmant::admin::Command::Enroll(_)),
+        env("ALARMANT_PUBLIC_URL"),
+        alarmant::tls::code_in_reply(&text),
+    ) {
+        // The pin comes from the self-signed pair only when the server is configured to make one
+        // (the same variable the server reads); a real certificate is never pinned.
+        let self_signed_dir = match env("ALARMANT_TLS_SELF_SIGNED_NAMES") {
+            None => None,
+            Some(_) => Some(env("ALARMANT_DATA_DIR").ok_or(
+                "ALARMANT_TLS_SELF_SIGNED_NAMES is set but ALARMANT_DATA_DIR is not: the link would carry no pin",
+            )?),
+        };
+        let link = alarmant::tls::link_for(&base, code, self_signed_dir.as_deref().map(Path::new))?;
+        println!(
+            "Link for the phone:
+{link}"
+        );
+    }
     Ok(())
 }
 
@@ -135,7 +156,28 @@ async fn serve() -> Result<(), String> {
     )
     .await
     .map_err(|_| "the admin endpoint could not start (loopback address only)")?;
-    let _public = public_server(&app)
+    let mut tls =
+        alarmant::tls::paths(env("ALARMANT_TLS_CERT_FILE"), env("ALARMANT_TLS_KEY_FILE"))?;
+    if let Some(names) = env("ALARMANT_TLS_SELF_SIGNED_NAMES") {
+        if tls.is_some() {
+            return Err(
+                "set ALARMANT_TLS_SELF_SIGNED_NAMES or the certificate and key files, not both"
+                    .to_owned(),
+            );
+        }
+        tls = Some(alarmant::tls::self_signed_in(Path::new(&dir), &names)?);
+    }
+    let mut public = public_server(&app);
+    if let Some((cert, key)) = &tls {
+        public = public.tls(alarmant::tls::acceptor_from_files(cert, key)?);
+        if let Ok(f) = std::fs::read(cert)
+            .map_err(|_| ())
+            .and_then(|c| alarmant::tls::fingerprint_hex(&c).map_err(|_| ()))
+        {
+            eprintln!("alarmant: serving HTTPS, certificate SHA-256 {f}");
+        }
+    }
+    let _public = public
         .bind(bind.to_string().as_str())
         .await
         .map_err(|_| "the public address could not be bound")?;

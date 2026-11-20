@@ -4,7 +4,8 @@
 //! sounds a siren until the operator clicks Stop, which acknowledges the alert.
 //!
 //! Environment: `ALARMANT_PC_SERVER` (https base URL, or http on this machine) and
-//! `ALARMANT_PC_KEY`. The key is never an argument and never printed.
+//! `ALARMANT_PC_KEY`; optionally `ALARMANT_PC_SERVER_CERT_FILE`, the server's own self-signed `tls-cert.pem`,
+//! to trust it (a home LAN). The key is never an argument and never printed.
 //!
 //! Limits, stated plainly: it works only while the PC is on, the user is logged in, the program is
 //! running and a playback device exists; it cannot wake a sleeping PC; headphones or a muted
@@ -149,7 +150,15 @@ mod win {
         let base =
             std::env::var("ALARMANT_PC_SERVER").map_err(|_| "ALARMANT_PC_SERVER is not set")?;
         let key = std::env::var("ALARMANT_PC_KEY").map_err(|_| "ALARMANT_PC_KEY is not set")?;
-        let client = PcClient::new(&base, key.trim()).map_err(|e| e.to_string())?;
+        let client = match std::env::var("ALARMANT_PC_SERVER_CERT_FILE") {
+            Ok(path) if !path.trim().is_empty() => {
+                let pem = std::fs::read(path.trim())
+                    .map_err(|_| "ALARMANT_PC_SERVER_CERT_FILE cannot be read")?;
+                PcClient::trusting(&base, key.trim(), &pem)
+            }
+            _ => PcClient::new(&base, key.trim()),
+        }
+        .map_err(|e| e.to_string())?;
         // SAFETY: once, at start, on the thread that runs everything (current-thread runtime).
         unsafe {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
