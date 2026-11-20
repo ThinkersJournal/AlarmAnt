@@ -395,15 +395,26 @@ mod tests {
         r.enr.set(e1);
         go(&r, Some(&bearer(&c1)), BODY, 2001).unwrap();
         let rec = r.alerts.get("a1").unwrap();
-        assert!(!rec.ack_token.matches(&first), "the replaced first phone's token is void");
-        assert!(rec.second_ack_token.as_ref().unwrap().matches(&second), "the second contact's token is untouched");
+        assert!(
+            !rec.ack_token.matches(&first),
+            "the replaced first phone's token is void"
+        );
+        assert!(
+            rec.second_ack_token.as_ref().unwrap().matches(&second),
+            "the second contact's token is untouched"
+        );
 
         // re-enrol the SECOND contact: now the second token goes
         let (c3, e3) = crate::enroll::new_enrollment_for(Contact::Second, 3000);
         r.enr.set(e3);
         go(&r, Some(&bearer(&c3)), BODY, 3001).unwrap();
         let rec = r.alerts.get("a1").unwrap();
-        assert!(!rec.second_ack_token.as_ref().is_some_and(|t| t.matches(&second)), "the replaced second phone's token is void");
+        assert!(
+            !rec.second_ack_token
+                .as_ref()
+                .is_some_and(|t| t.matches(&second)),
+            "the replaced second phone's token is void"
+        );
     }
 
     fn put(r: &Rig, auth: Option<&str>, body: &str) -> Result<(), RegisterError> {

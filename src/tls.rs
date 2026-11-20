@@ -14,7 +14,10 @@ use base64::Engine as _;
 use httpant_server::{FixedCert, ServerCert, TlsAcceptor};
 
 /// Which files to use: both set, neither set, or a refusal for exactly one.
-pub fn paths(cert: Option<String>, key: Option<String>) -> Result<Option<(String, String)>, &'static str> {
+pub fn paths(
+    cert: Option<String>,
+    key: Option<String>,
+) -> Result<Option<(String, String)>, &'static str> {
     match (cert, key) {
         (None, None) => Ok(None),
         (Some(c), Some(k)) => Ok(Some((c, k))),
@@ -24,8 +27,9 @@ pub fn paths(cert: Option<String>, key: Option<String>) -> Result<Option<(String
 
 /// The acceptor for a PEM chain (leaf first) and its private key.
 pub fn acceptor(chain_pem: &[u8], key_pem: &[u8]) -> Result<TlsAcceptor, &'static str> {
-    let cert = ServerCert::from_pem(chain_pem, key_pem)
-        .map_err(|_| "the TLS certificate and key are not usable (PEM chain, matching private key)")?;
+    let cert = ServerCert::from_pem(chain_pem, key_pem).map_err(
+        |_| "the TLS certificate and key are not usable (PEM chain, matching private key)",
+    )?;
     Ok(TlsAcceptor::new(FixedCert::new(cert)))
 }
 
@@ -96,7 +100,10 @@ fn write_atomic(path: &std::path::Path, bytes: &[u8], private: bool) -> Result<(
 /// * A certificate without its key: refused (it cannot be repaired from here).
 ///
 /// Returns the two file paths.
-pub fn self_signed_in(dir: &std::path::Path, names: &str) -> Result<(String, String), &'static str> {
+pub fn self_signed_in(
+    dir: &std::path::Path,
+    names: &str,
+) -> Result<(String, String), &'static str> {
     let cert = dir.join(SELF_CERT);
     let key = dir.join(SELF_KEY);
     let names_file = dir.join(SELF_NAMES);
@@ -106,11 +113,15 @@ pub fn self_signed_in(dir: &std::path::Path, names: &str) -> Result<(String, Str
     }
     if cert.exists() {
         if !key.exists() {
-            return Err("tls-cert.pem exists without tls-key.pem: delete tls-cert.pem to make a new pair (phones must enrol again)");
+            return Err(
+                "tls-cert.pem exists without tls-key.pem: delete tls-cert.pem to make a new pair (phones must enrol again)",
+            );
         }
         let had = std::fs::read_to_string(&names_file).map(|t| name_list(&t.replace('\n', ",")));
         if had.as_deref().ok() != Some(wanted.as_slice()) {
-            return Err("ALARMANT_TLS_SELF_SIGNED_NAMES differs from the names the certificate was made for: delete tls-cert.pem, tls-key.pem and tls-names.txt to make a new pair (phones must enrol again)");
+            return Err(
+                "ALARMANT_TLS_SELF_SIGNED_NAMES differs from the names the certificate was made for: delete tls-cert.pem, tls-key.pem and tls-names.txt to make a new pair (phones must enrol again)",
+            );
         }
     } else {
         // Nothing yet, or an interrupted run: start clean.
@@ -122,7 +133,11 @@ pub fn self_signed_in(dir: &std::path::Path, names: &str) -> Result<(String, Str
         write_atomic(&names_file, wanted.join("\n").as_bytes(), false)?;
         write_atomic(&cert, made.cert.pem().as_bytes(), false)?; // last: its presence means complete
     }
-    let s = |p: std::path::PathBuf| p.to_str().map(str::to_owned).ok_or("the data directory path is not text");
+    let s = |p: std::path::PathBuf| {
+        p.to_str()
+            .map(str::to_owned)
+            .ok_or("the data directory path is not text")
+    };
     Ok((s(cert)?, s(key)?))
 }
 
@@ -131,7 +146,9 @@ pub fn enrol_link(base: &str, code: &str, fingerprint: Option<&str>) -> String {
     let mut enc = String::new();
     for b in base.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => enc.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                enc.push(b as char)
+            }
             _ => enc.push_str(&format!("%{b:02X}")),
         }
     }
@@ -146,9 +163,11 @@ pub fn enrol_link(base: &str, code: &str, fingerprint: Option<&str>) -> String {
 /// The enrolment code in the admin reply: the one line that is exactly 32 lowercase hex digits
 /// (not a position in the text, so a reworded reply cannot make the link carry the wrong line).
 pub fn code_in_reply(text: &str) -> Option<&str> {
-    text.lines()
-        .map(str::trim)
-        .find(|l| l.len() == 32 && l.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+    text.lines().map(str::trim).find(|l| {
+        l.len() == 32
+            && l.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    })
 }
 
 /// The host of an `https://host[:port]/...` address, lower-case, without a port or brackets.
@@ -168,9 +187,16 @@ fn https_host(base: &str) -> Option<String> {
 /// its own certificate) the pair must be readable there and `base`'s host must be one of the names the
 /// certificate was made for, or the phone would fail the handshake and the one-time code would be
 /// wasted; the pin is added. Without it nothing is pinned and the system trust store applies.
-pub fn link_for(base: &str, code: &str, self_signed_dir: Option<&std::path::Path>) -> Result<String, String> {
+pub fn link_for(
+    base: &str,
+    code: &str,
+    self_signed_dir: Option<&std::path::Path>,
+) -> Result<String, String> {
     let Some(host) = https_host(base) else {
-        return Err("ALARMANT_PUBLIC_URL must be an https:// address (the phone rejects anything else)".to_owned());
+        return Err(
+            "ALARMANT_PUBLIC_URL must be an https:// address (the phone rejects anything else)"
+                .to_owned(),
+        );
     };
     let pin = match self_signed_dir {
         None => None,
@@ -211,7 +237,10 @@ mod tests {
         let (c, _) = pair();
         let f = fingerprint_hex(c.as_bytes()).unwrap();
         assert_eq!(f.len(), 64);
-        assert!(f.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)));
+        assert!(
+            f.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        );
         assert_eq!(f, fingerprint_hex(c.as_bytes()).unwrap());
         let (other, _) = pair();
         assert_ne!(f, fingerprint_hex(other.as_bytes()).unwrap());
@@ -227,8 +256,14 @@ mod tests {
         assert_eq!(f1, fingerprint_hex(&std::fs::read(&c2).unwrap()).unwrap());
         assert!(acceptor_from_files(&c1, &k1).is_ok());
         // the IP name is an IP subject alternative name (4 raw bytes in the DER), not only text
-        let b64: String = std::fs::read_to_string(&c1).unwrap().lines().filter(|l| !l.starts_with("-----")).collect();
-        let der = base64::engine::general_purpose::STANDARD.decode(b64).unwrap();
+        let b64: String = std::fs::read_to_string(&c1)
+            .unwrap()
+            .lines()
+            .filter(|l| !l.starts_with("-----"))
+            .collect();
+        let der = base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .unwrap();
         assert!(der.windows(4).any(|w| w == [127, 0, 0, 1]));
     }
 
@@ -263,17 +298,29 @@ mod tests {
     #[test]
     fn the_code_is_found_by_shape_not_by_line_position() {
         let code = "0123456789abcdef0123456789abcdef";
-        let reply = format!("Enrolment code (shown once, valid 10 minutes, usable once):
+        let reply = format!(
+            "Enrolment code (shown once, valid 10 minutes, usable once):
 {code}
-");
+"
+        );
         assert_eq!(code_in_reply(&reply), Some(code));
-        assert_eq!(code_in_reply(&format!("a note first
+        assert_eq!(
+            code_in_reply(&format!(
+                "a note first
 and another
   {code}  
-")), Some(code));
-        assert_eq!(code_in_reply("Device removed.
+"
+            )),
+            Some(code)
+        );
+        assert_eq!(
+            code_in_reply(
+                "Device removed.
 No code here
-"), None);
+"
+            ),
+            None
+        );
         assert_eq!(code_in_reply("0123456789ABCDEF0123456789abcdef"), None);
     }
 
@@ -298,9 +345,20 @@ No code here
         assert!(link_for("https://10.0.0.99:8443", "abc", Some(d.path())).is_err());
         assert!(link_for("https://user@10.0.0.5", "abc", Some(d.path())).is_ok());
         // a real certificate: a stale tls-cert.pem in the directory is ignored
-        assert!(!link_for("https://h.example", "abc", None).unwrap().contains("&f="));
+        assert!(
+            !link_for("https://h.example", "abc", None)
+                .unwrap()
+                .contains("&f=")
+        );
         assert!(link_for("http://h", "abc", None).is_err());
-        assert!(link_for("https://h", "abc", Some(tempfile::tempdir().unwrap().path())).is_err());
+        assert!(
+            link_for(
+                "https://h",
+                "abc",
+                Some(tempfile::tempdir().unwrap().path())
+            )
+            .is_err()
+        );
         assert_eq!(https_host("https://[::1]:8443/x"), Some("::1".to_owned()));
         assert_eq!(https_host("http://h"), None);
     }
@@ -308,7 +366,10 @@ No code here
     #[test]
     fn both_or_neither_path_is_accepted_and_one_alone_refused() {
         assert_eq!(paths(None, None), Ok(None));
-        assert_eq!(paths(Some("c".into()), Some("k".into())), Ok(Some(("c".into(), "k".into()))));
+        assert_eq!(
+            paths(Some("c".into()), Some("k".into())),
+            Ok(Some(("c".into(), "k".into())))
+        );
         assert!(paths(Some("c".into()), None).is_err());
         assert!(paths(None, Some("k".into())).is_err());
     }

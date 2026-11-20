@@ -111,7 +111,8 @@ impl PcClient {
 
     /// Alert ids whose PC alarm should be sounding now.
     pub async fn active(&self) -> Result<Vec<String>, PcError> {
-        let res = self.client
+        let res = self
+            .client
             .get(format!("{}/pc/alarm", self.base))
             .header("authorization", format!("Bearer {}", self.key))
             .send()
@@ -138,7 +139,8 @@ impl PcClient {
 
     /// The operator's Acknowledge for one alert.
     pub async fn acknowledge(&self, alert_id: &str) -> Result<(), PcError> {
-        let res = self.client
+        let res = self
+            .client
             .post(format!("{}/pc/ack/{alert_id}", self.base))
             .header("authorization", format!("Bearer {}", self.key))
             .send()
@@ -243,12 +245,21 @@ mod tests {
         let trusting = PcClient::trusting(&base, key, cert.as_bytes()).unwrap();
         assert_eq!(trusting.active().await, Ok(vec![]));
         // control: the same server, a client that was not given the certificate
-        assert_eq!(PcClient::new(&base, key).unwrap().active().await, Err(PcError::Unreachable));
+        assert_eq!(
+            PcClient::new(&base, key).unwrap().active().await,
+            Err(PcError::Unreachable)
+        );
         // another certificate is not this server's
-        let other = rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_owned()]).unwrap().cert.pem();
+        let other = rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_owned()])
+            .unwrap()
+            .cert
+            .pem();
         let wrong = PcClient::trusting(&base, key, other.as_bytes()).unwrap();
         assert_eq!(wrong.active().await, Err(PcError::Unreachable));
-        assert_eq!(PcClient::trusting(&base, key, b"not pem").err(), Some(PcError::BadCertificate));
+        assert_eq!(
+            PcClient::trusting(&base, key, b"not pem").err(),
+            Some(PcError::BadCertificate)
+        );
     }
 
     fn ids(v: &[&str]) -> Result<Vec<String>, PcError> {

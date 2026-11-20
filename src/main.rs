@@ -86,8 +86,10 @@ async fn client(args: &[String]) -> Result<(), String> {
             )?),
         };
         let link = alarmant::tls::link_for(&base, code, self_signed_dir.as_deref().map(Path::new))?;
-        println!("Link for the phone:
-{link}");
+        println!(
+            "Link for the phone:
+{link}"
+        );
     }
     Ok(())
 }
@@ -154,17 +156,24 @@ async fn serve() -> Result<(), String> {
     )
     .await
     .map_err(|_| "the admin endpoint could not start (loopback address only)")?;
-    let mut tls = alarmant::tls::paths(env("ALARMANT_TLS_CERT_FILE"), env("ALARMANT_TLS_KEY_FILE"))?;
+    let mut tls =
+        alarmant::tls::paths(env("ALARMANT_TLS_CERT_FILE"), env("ALARMANT_TLS_KEY_FILE"))?;
     if let Some(names) = env("ALARMANT_TLS_SELF_SIGNED_NAMES") {
         if tls.is_some() {
-            return Err("set ALARMANT_TLS_SELF_SIGNED_NAMES or the certificate and key files, not both".to_owned());
+            return Err(
+                "set ALARMANT_TLS_SELF_SIGNED_NAMES or the certificate and key files, not both"
+                    .to_owned(),
+            );
         }
         tls = Some(alarmant::tls::self_signed_in(Path::new(&dir), &names)?);
     }
     let mut public = public_server(&app);
     if let Some((cert, key)) = &tls {
         public = public.tls(alarmant::tls::acceptor_from_files(cert, key)?);
-        if let Ok(f) = std::fs::read(cert).map_err(|_| ()).and_then(|c| alarmant::tls::fingerprint_hex(&c).map_err(|_| ())) {
+        if let Ok(f) = std::fs::read(cert)
+            .map_err(|_| ())
+            .and_then(|c| alarmant::tls::fingerprint_hex(&c).map_err(|_| ()))
+        {
             eprintln!("alarmant: serving HTTPS, certificate SHA-256 {f}");
         }
     }
