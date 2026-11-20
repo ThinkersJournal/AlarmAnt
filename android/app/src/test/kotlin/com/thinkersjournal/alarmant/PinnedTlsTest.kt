@@ -77,6 +77,30 @@ class PinnedTlsTest {
     }
 
     @Test
+    fun aPinOnAnHttpUrlIsRefusedNotIgnored() {
+        try {
+            PinnedTls.open(URL("http://10.0.0.5:8080"), PinnedTls.sha256Hex(certA))
+            fail("expected an exception: a pin on http must not fall back to cleartext")
+        } catch (_: IllegalArgumentException) {
+        }
+    }
+
+    @Test
+    fun aMismatchIsRecognisedThroughItsCauseChainAndNothingElseIs() {
+        val mismatch = try {
+            PinnedTls.checkLeaf(certA, "0".repeat(64))
+            null
+        } catch (e: CertificateException) {
+            e
+        }
+        assertTrue(PinnedTls.isPinFailure(mismatch))
+        assertTrue(PinnedTls.isPinFailure(javax.net.ssl.SSLHandshakeException("handshake").initCause(mismatch)))
+        assertFalse(PinnedTls.isPinFailure(java.io.IOException("timeout")))
+        assertFalse(PinnedTls.isPinFailure(CertificateException("other")))
+        assertFalse(PinnedTls.isPinFailure(null))
+    }
+
+    @Test
     fun anInvalidPinIsNotSilentlyIgnored() {
         try {
             PinnedTls.open(URL("https://h"), "nope")

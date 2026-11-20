@@ -50,11 +50,11 @@ const SELF_CERT: &str = "tls-cert.pem";
 const SELF_KEY: &str = "tls-key.pem";
 const SELF_NAMES: &str = "tls-names.txt";
 
-/// The names as a sorted, de-duplicated list (so a reordered variable is not a change).
+/// The names as a sorted, lower-case, de-duplicated list (so a reordered or re-cased variable is not a change).
 fn name_list(names: &str) -> Vec<String> {
     let mut v: Vec<String> = names
         .split(',')
-        .map(|n| n.trim().to_owned())
+        .map(|n| n.trim().to_ascii_lowercase())
         .filter(|n| !n.is_empty())
         .collect();
     v.sort();
@@ -151,17 +151,39 @@ pub fn code_in_reply(text: &str) -> Option<&str> {
         .find(|l| l.len() == 32 && l.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
 }
 
-/// The enrol link for the operator: `base` must be `https://`; the pin is added only when
-/// `self_signed_dir` is given and holds the pair the server serves.
+/// The host of an `https://host[:port]/...` address, lower-case, without a port or brackets.
+fn https_host(base: &str) -> Option<String> {
+    let rest = base.strip_prefix("https://")?;
+    let auth = rest.split(['/', '?', '#']).next()?;
+    let auth = auth.rsplit_once('@').map_or(auth, |(_, h)| h);
+    let host = if let Some(h) = auth.strip_prefix('[') {
+        h.split(']').next()?
+    } else {
+        auth.rsplit_once(':').map_or(auth, |(h, _)| h)
+    };
+    (!host.is_empty()).then(|| host.to_ascii_lowercase())
+}
+
+/// The enrol link for the operator: `base` must be `https://`. With `self_signed_dir` (the server makes
+/// its own certificate) the pair must be readable there and `base`'s host must be one of the names the
+/// certificate was made for, or the phone would fail the handshake and the one-time code would be
+/// wasted; the pin is added. Without it nothing is pinned and the system trust store applies.
 pub fn link_for(base: &str, code: &str, self_signed_dir: Option<&std::path::Path>) -> Result<String, String> {
-    if !base.starts_with("https://") {
+    let Some(host) = https_host(base) else {
         return Err("ALARMANT_PUBLIC_URL must be an https:// address (the phone rejects anything else)".to_owned());
-    }
+    };
     let pin = match self_signed_dir {
         None => None,
         Some(dir) => {
-            let pem = std::fs::read(dir.join(SELF_CERT))
-                .map_err(|_| "ALARMANT_TLS_SELF_SIGNED_NAMES is set but tls-cert.pem cannot be read from ALARMANT_DATA_DIR".to_owned())?;
+            let pem = std::fs::read(dir.join(SELF_CERT)).map_err(|_| {
+                "ALARMANT_TLS_SELF_SIGNED_NAMES is set but tls-cert.pem cannot be read from ALARMANT_DATA_DIR (start the server once first)".to_owned()
+            })?;
+            let names = std::fs::read_to_string(dir.join(SELF_NAMES))
+                .map(|t| name_list(&t.replace('\n', ",")))
+                .map_err(|_| "tls-names.txt cannot be read from ALARMANT_DATA_DIR".to_owned())?;
+            if !names.contains(&host) {
+                return Err("the host in ALARMANT_PUBLIC_URL is not one of the names the certificate was made for (tls-names.txt): the phone would refuse it".to_owned());
+            }
             Some(fingerprint_hex(&pem).map_err(str::to_owned)?)
         }
     };
@@ -267,14 +289,20 @@ No code here
     #[test]
     fn the_operator_link_needs_https_and_pins_only_a_self_signed_pair() {
         let d = tempfile::tempdir().unwrap();
-        let (c, _) = self_signed_in(d.path(), "10.0.0.5").unwrap();
+        let (c, _) = self_signed_in(d.path(), "10.0.0.5, Alarm.Home").unwrap();
         let f = fingerprint_hex(&std::fs::read(c).unwrap()).unwrap();
         let pinned = link_for("https://10.0.0.5:8443", "abc", Some(d.path())).unwrap();
         assert!(pinned.ends_with(&format!("&f={f}")));
+        // the host may be written in another case; a name the certificate does not cover is refused
+        assert!(link_for("https://ALARM.home/", "abc", Some(d.path())).is_ok());
+        assert!(link_for("https://10.0.0.99:8443", "abc", Some(d.path())).is_err());
+        assert!(link_for("https://user@10.0.0.5", "abc", Some(d.path())).is_ok());
         // a real certificate: a stale tls-cert.pem in the directory is ignored
         assert!(!link_for("https://h.example", "abc", None).unwrap().contains("&f="));
         assert!(link_for("http://h", "abc", None).is_err());
         assert!(link_for("https://h", "abc", Some(tempfile::tempdir().unwrap().path())).is_err());
+        assert_eq!(https_host("https://[::1]:8443/x"), Some("::1".to_owned()));
+        assert_eq!(https_host("http://h"), None);
     }
 
     #[test]

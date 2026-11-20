@@ -95,8 +95,9 @@ object Registration {
         } catch (_: IllegalArgumentException) {
             // An unusable stored pin or address: nothing to retry, re-enrol (PinnedTls.open refuses it).
             Outcome.REJECTED
-        } catch (_: IOException) {
-            Outcome.RETRY_LATER
+        } catch (e: IOException) {
+            // A pin mismatch is permanent: the phone must be enrolled again with the server's current link.
+            if (PinnedTls.isPinFailure(e)) Outcome.REJECTED else Outcome.RETRY_LATER
         }
     }
 
@@ -130,8 +131,9 @@ object Registration {
         } catch (_: IllegalArgumentException) {
             // An unusable stored pin or address: nothing to retry, re-enrol (PinnedTls.open refuses it).
             Outcome.REJECTED
-        } catch (_: IOException) {
-            Outcome.RETRY_LATER
+        } catch (e: IOException) {
+            // A pin mismatch is permanent: the phone must be enrolled again with the server's current link.
+            if (PinnedTls.isPinFailure(e)) Outcome.REJECTED else Outcome.RETRY_LATER
         }
     }
 }

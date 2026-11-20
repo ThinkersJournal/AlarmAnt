@@ -79,8 +79,12 @@ async fn client(args: &[String]) -> Result<(), String> {
     ) {
         // The pin comes from the self-signed pair only when the server is configured to make one
         // (the same variable the server reads); a real certificate is never pinned.
-        let self_signed_dir = env("ALARMANT_TLS_SELF_SIGNED_NAMES")
-            .and_then(|_| env("ALARMANT_DATA_DIR"));
+        let self_signed_dir = match env("ALARMANT_TLS_SELF_SIGNED_NAMES") {
+            None => None,
+            Some(_) => Some(env("ALARMANT_DATA_DIR").ok_or(
+                "ALARMANT_TLS_SELF_SIGNED_NAMES is set but ALARMANT_DATA_DIR is not: the link would carry no pin",
+            )?),
+        };
         let link = alarmant::tls::link_for(&base, code, self_signed_dir.as_deref().map(Path::new))?;
         println!("Link for the phone:
 {link}");

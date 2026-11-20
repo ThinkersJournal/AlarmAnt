@@ -36,8 +36,23 @@ object PinnedTls {
         if (der == null || der.isEmpty()) throw CertificateException("no certificate presented")
         val got = sha256Hex(der).toByteArray(Charsets.US_ASCII)
         if (!MessageDigest.isEqual(got, pin.toByteArray(Charsets.US_ASCII))) {
-            throw CertificateException("certificate does not match the pin")
+            throw PinMismatch("certificate does not match the pin")
         }
+    }
+
+    /** The pin did not match: permanent until the phone is enrolled again, so callers must not retry it for ever. */
+    class PinMismatch(message: String) : CertificateException(message)
+
+    /** True when [e], or anything it was caused by, is a pin mismatch. */
+    fun isPinFailure(e: Throwable?): Boolean {
+        var t = e
+        var depth = 0
+        while (t != null && depth < 10) {
+            if (t is PinMismatch) return true
+            t = t.cause
+            depth++
+        }
+        return false
     }
 
     @SuppressLint("CustomX509TrustManager") // Self-signed LAN sender: the pin replaces CA trust for this connection only; see the class comment.
@@ -56,9 +71,14 @@ object PinnedTls {
 
     /** A connection to [url]; with a valid [pin] on an https URL only the pinned certificate is accepted. */
     fun open(url: URL, pin: String?): HttpURLConnection {
+        // Fail closed: a pin is only meaningful on https, and a bad pin or a non-https URL with a pin is an
+        // error, never a silent fallback to cleartext or to system trust.
+        if (pin != null) {
+            require(isPin(pin)) { "invalid pin" }
+            require(url.protocol == "https") { "a pin needs an https URL" }
+        }
         val conn = url.openConnection() as HttpURLConnection
         if (conn is HttpsURLConnection && pin != null) {
-            require(isPin(pin)) { "invalid pin" }
             val ctx = SSLContext.getInstance("TLS")
             ctx.init(null, arrayOf(PinTrustManager(pin)), null)
             conn.sslSocketFactory = ctx.socketFactory

@@ -170,10 +170,11 @@ fn parse_fcm_token(body: &str) -> Result<String, RegisterError> {
     Ok(t.to_owned())
 }
 
-/// Handles `POST /register`; returns the new ack token, to be answered once.
-///
+/// One registration at a time, so the replaced device read in [`register`] is the one swapped out.
 static REGISTER_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+/// Handles `POST /register`; returns the new ack token, to be answered once.
+///
 /// The body is checked before the code is spent, so a malformed request cannot waste a code; a 400
 /// says nothing about the code.
 pub fn register(
@@ -205,12 +206,12 @@ pub fn register(
         Contact::First => devices.device(),
         Contact::Second => devices.second_device(),
     };
-    // Registration: a replaced phone is gone, like a revoked one. Its ack tokens are voided BEFORE
-    // the new device is stored, so there is no moment when the old phone can still stand down an alert.
+    // The new device is stored FIRST, then the old token is voided, the order `revoke_contact` uses:
+    // an alert raised from now on carries the new token, and an alert raised just before already holds
+    // the old one, which the void below reaches. (Voiding first would let an alert raised between the
+    // two steps carry the old token and escape the void for good.) The only window is the instant
+    // between the two calls, in which the old phone can still acknowledge an alert it already holds.
     // Server-side only; nothing is sent to it and nothing is restored (PATENT-REGISTRATION-READING).
-    if let Some(old) = &replaced {
-        alerts.void_ack_tokens(&old.ack_token);
-    }
     devices.set_for(
         contact,
         Device {
@@ -218,6 +219,9 @@ pub fn register(
             ack_token: AckToken::new(&token),
         },
     );
+    if let Some(old) = replaced {
+        alerts.void_ack_tokens(&old.ack_token);
+    }
     Ok(token)
 }
 

@@ -38,8 +38,10 @@ class AckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
             }
         } catch (_: IllegalArgumentException) {
             Result.failure() // an unusable stored pin: retrying cannot help; the alarm already stopped locally
-        } catch (_: java.io.IOException) {
-            Result.retry()
+        } catch (e: java.io.IOException) {
+            // A pin mismatch cannot heal by waiting (the server's certificate is not the one enrolled): stop.
+            // The alarm has already stopped locally; the phone needs a new enrolment link.
+            if (PinnedTls.isPinFailure(e)) Result.failure() else Result.retry()
         }
     }
 
