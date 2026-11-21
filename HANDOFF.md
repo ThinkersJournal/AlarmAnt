@@ -7,11 +7,11 @@ Workflow: Sonnet only; one changelog FRAGMENT per PR (`changelog.d/<topic>.md`, 
 
 IN FLIGHT:
 - #72 MERGED (0.3.0, 00:43Z): re-enrolment voids old ack tokens, https-only enrolment, server HTTPS (`ALARMANT_TLS_*`, `ALARMANT_TLS_SELF_SIGNED_NAMES`), Android `PinnedTls`, PC alarm trust (`ALARMANT_PC_SERVER_CERT_FILE`). Follow-ups from its reviews: a handshake test of `PinTrustManager`/hostname verifier (needs a JDK keystore), a Windows owner-only ACL for `tls-key.pem` (ROADMAP A11, A12 on the note branch).
-- Branch `alert-rate-limit` (worktree `AlarmAnt-wt-ratelimit`, no PR yet): ROADMAP A10, `POST /alert` per-key rate limit (module `ratelimit`, defaults 6/h, 20/day, `ALARMANT_RATE_PER_HOUR`/`_DAY`); red-first test seen failing, sabotage fails 5 tests, 206 tests, fragment `changelog.d/alert-rate-limit.md` (BREAKING for a sender over 6/h). PR day: 2026-11-22 UTC (11-21 is the note's); [READY] to pm-assist cc pm-ants.
+- Branch `alert-rate-limit` (worktree `AlarmAnt-wt-ratelimit`, no PR yet; also holds `GET /alert/:id`, `tests/constraints.rs` (ruling 407-A), ROADMAP A13; rulings 478 and 407-A accepted: adapter as designed, NO watchdog code until the USPTO/Espacenet dead-man search is done; the bridge waits on a `synapsed-client` publish newer than rc.123): ROADMAP A10, `POST /alert` per-key rate limit (module `ratelimit`, defaults 6/h, 20/day, `ALARMANT_RATE_PER_HOUR`/`_DAY`); red-first test seen failing, sabotage fails 5 tests, 206 tests, fragment `changelog.d/alert-rate-limit.md` (BREAKING for a sender over 6/h). PR day: 2026-11-22 UTC (11-21 is the note's); [READY] to pm-assist cc pm-ants.
 - PR #73 merged as 0.3.1 (note `docs/SYNAPSE-ADAPTER.md` in main; branch and worktree removed). No adapter/watchdog code until CireSnave answers (board 478); owed: USPTO full text and Espacenet heartbeat search (a person or a lane with access), a person confirming the readings.
 - A8 (#70) merged: first `android-v*` tag push waits for the PM's word and CireSnave's five secrets (board 462).
 
-WAIT: A10 + apache-text-fix + PATENT-SYNAPSE-READING PR day (open ONE PR from `alert-rate-limit`, BREAKING, [READY] to pm-assist cc pm-ants) | check: gh pr list --head alert-rate-limit --state all | wake: 2026-11-22T00:10:00Z
+PR WINDOW (not a wait, pm-ants 6.29): open ONE PR from `alert-rate-limit` at or after 2026-11-22T00:00Z (BREAKING A10; carries PATENT-SYNAPSE-READING.md, GET /alert/:id, tests/constraints.rs; fold `apache-text-fix.md` so there is one fragment), [READY] to pm-assist cc pm-ants. Keep committing on this branch meanwhile.
 
 NEXT, in order:
 1. 11-21 UTC: open the note PR; run and record the patent reading (Part: inbound channel and heartbeat watchdog).
