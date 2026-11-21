@@ -30,3 +30,24 @@ S5. Re-read before: a gateway at the human's premises, a delivery-failure report
 ## Open
 
 A person should confirm this reading, and the US8050281 "which device" question. More searches on heartbeat/dead-man claims (Espacenet, USPTO full text) are owed before watchdog code. No adapter or watchdog code starts until that is answered.
+
+## Addendum 2026-11-21 (after pm-ants's go): heartbeat and dead-man searches
+
+**What could not be run:** USPTO full text and Espacenet are not reachable from this lane's tools (web search and the Google Patents page reader only), so they were **not run**. This addendum is more searches of the same kind, not the owed full-text search; that stays owed.
+
+| # | Query (web search, 2026-11-21) | Result |
+|---|---|---|
+| S3 | Google Patents: heartbeat signal not received within a predetermined time, monitoring server alerts administrator, watchdog | US8525664 (Tyco), US20200162434 (Arete M), EP2400392 (NCR), US20190140908, WO2013107137, CN101106535, US7788231 (last four snippets only) |
+| S4 | "dead man's switch" software, periodic check-in missed, notify contact, claims | no software patent surfaced; apps and open-source projects only; US7034696 / US7119694 (marine proximity interrupter, snippet only) |
+
+| Patent | Holder; status (Google, not official) | Independents read | Verdict |
+|---|---|---|---|
+| US8525664B2 supervised security heartbeat | Tyco; Active, est. 2032-01-05 | 1, 11, 14: a controller sends a heartbeat, waits for an acknowledgement, resets the interval on ack, and **sends a second heartbeat over a second, different communication network** when none arrives | outside as read: needs the second heartbeat over a different network, and a sender that waits for an ack; ours is a one-way heartbeat on one route (constraint S6) |
+| US20200162434A1 secure heartbeat for unmanned vehicles | Arete M; Abandoned | 1, 6, 12, 13, 17: vehicle heartbeat with failsafe, a platform sending a failure alert **to the vehicle**, TLS channel, hybrid encryption | outside as read (and abandoned): nothing is sent back to the sender, no failsafe, no custom encryption |
+| EP2400392A1 application heartbeat | NCR; Withdrawn | 1: status requests to objects of one application, an application-valid signal to an independent monitor | outside as read (and withdrawn); we do not poll internals of an application, the watched thing sends its own beat |
+
+Not read: US20190140908, WO2013107137, CN101106535, US7788231, US7034696, US7119694.
+
+**Result:** still no claim found that covers a missed-heartbeat page; two further searches and three independents read. That is thin, not a clear. Two product families (uptime and heartbeat monitors) exist but are not patents and I have not read their patents.
+
+S6. The heartbeat is one-way and on one route: no acknowledgement the sender waits for, no retransmission over a second network, no failsafe action by the watched side.
