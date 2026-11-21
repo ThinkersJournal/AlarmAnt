@@ -112,6 +112,7 @@ where
 {
     let server = alert_route(Server::new(), app);
     let server = ack_route(server, app);
+    let server = alert_state_route(server, app);
     let devices: Arc<dyn DeviceStore> = app.devices.clone();
     let server = register_route(
         server,
@@ -232,6 +233,38 @@ where
             .await;
             let (status, body) = response(&result);
             json_response(status, &body)
+        }
+    })
+}
+
+/// Adds `GET /alert/:alert_id`: the sender's read-only view of ONE alert, `{"state":"open"}` or
+/// `{"state":"acked"}` and nothing else (never the chain step, never a fetch: constraint 13). Same
+/// `Authorization: Bearer <API key>` as `POST /alert`. 401 for a bad key; 404 for an unknown id.
+fn alert_state_route<T, D>(server: Server, app: &App<T, D>) -> Server {
+    let (key, alerts) = (Arc::new(app.api_key.clone()), Arc::clone(&app.alerts));
+    server.get("/alert/:alert_id", move |req: Request| {
+        let (key, alerts) = (Arc::clone(&key), Arc::clone(&alerts));
+        async move {
+            let ok = authorization(&req)
+                .and_then(bearer_token)
+                .is_some_and(|k| key.matches(k));
+            if !ok {
+                return StatusCode::UNAUTHORIZED.into_response();
+            }
+            let record = req
+                .extensions()
+                .get::<PathParams>()
+                .and_then(|p| p.get("alert_id"))
+                .and_then(|id| alerts.get(id));
+            let Some(record) = record else {
+                return StatusCode::NOT_FOUND.into_response();
+            };
+            let state = if record.state == crate::AlertState::Acked {
+                "acked"
+            } else {
+                "open"
+            };
+            json_response(200, &serde_json::json!({ "state": state }))
         }
     })
 }
@@ -512,6 +545,39 @@ mod tests {
         // an hour later the hourly window has moved on
         now.store(10_000 + 3_601, Ordering::SeqCst);
         assert_eq!(call(&base, "POST", "/alert", &good, body).await.0, 202);
+    }
+
+    /// `GET /alert/:id` answers open or acked and nothing else; a wrong key is 401, an unknown id 404.
+    #[tokio::test]
+    async fn the_alert_state_endpoint_answers_open_or_acked_only() {
+        let now = Arc::new(AtomicU64::new(1000));
+        let app = app(Arc::clone(&now));
+        let srv = public_server(&app).bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", srv.addr());
+        let good = format!("Bearer {KEY}");
+        let (st, v) = call(
+            &base,
+            "POST",
+            "/alert",
+            &good,
+            r#"{"title":"t","body":"b"}"#,
+        )
+        .await;
+        assert_eq!(st, 202);
+        let id = v["alert_id"].as_str().unwrap().to_owned();
+        let path = format!("/alert/{id}");
+        assert_eq!(call(&base, "GET", &path, "Bearer nope", "").await.0, 401);
+        assert_eq!(call(&base, "GET", "/alert/unknown", &good, "").await.0, 404);
+        let (st, v) = call(&base, "GET", &path, &good, "").await;
+        assert_eq!((st, v), (200, serde_json::json!({"state": "open"})));
+        // a step on the chain does not show: still just "open"
+        now.store(1000 + 61, Ordering::SeqCst);
+        tick_once(&app, 1000 + 61).await;
+        let (_, v) = call(&base, "GET", &path, &good, "").await;
+        assert_eq!(v, serde_json::json!({"state": "open"}));
+        app.alerts.mark_acked(&id, 1100);
+        let (st, v) = call(&base, "GET", &path, &good, "").await;
+        assert_eq!((st, v), (200, serde_json::json!({"state": "acked"})));
     }
 
     #[tokio::test]
