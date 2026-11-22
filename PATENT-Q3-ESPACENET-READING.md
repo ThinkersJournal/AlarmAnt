@@ -114,3 +114,17 @@ applications 202241047519 (elderly wandering monitor, G08B) and 202121042624 (fa
 Result so far (Q3 and Q4, 56 distinct families read): none reads on (a)-(d) together. US10425316B2 remains "needs more".
 Nothing here is clearance: partial search, claim text only to 520-1000 characters per independent claim, machine
 translations for CN/JP/KR.
+
+## Q3 straggler batch (12 numbers; 8 fetched)
+
+US8510755B2 (Expired), US8879734B2 (Juniper, Active, est. exp. 2031: missed server heartbeats -> client acts on a version identifier, group VPN), US9170892B2, CN105045533B, CN103425553B (Expired), CN115757015A, CN121664845B, CN112817824A (Withdrawn), CN122159954A: all **outside as read** (cluster/failover/VPN/UAV plumbing; no person is alerted).
+Not on Google (404): CN122885272A, CN122796633A, CN122861966A, plus the earlier CN122970019A, CN122672037A, CN122932157A.
+
+## Closing summary (2026-11-22, lane alarmant)
+
+About 60 distinct families read across Q3 and Q4. **None reads on (a)-(d) together.** One "needs more": US10425316B2 (Nokia
+of America, Active, priority 2017-09-29; family WO2019068107, ceased): heartbeat missed in an interval -> alarm message to
+an "external system", limited to customer premises equipment, no person and no fixed deadline stated. Open gaps: PATENTSCOPE
+Search 2 ranks 201-275 are not in the export; nine numbers (CN122970019A, CN122672037A, CN122932157A, CN122885272A, CN122796633A,
+CN122861966A, and Indian filings 202241047519, 202121042624, 202111000114) have no text on Google; Q1-Q4 are a partial search.
+Not legal advice; a person must confirm.
