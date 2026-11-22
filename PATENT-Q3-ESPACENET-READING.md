@@ -73,3 +73,44 @@ which reads (a)(b) and an alarm to an "external system" but is limited to custom
 neither a person nor a fixed deadline: "needs more".
 
 Unread plausible families remain (about 15 by title, listed in the next batch); this file is extended as they are read.
+
+# Q4 (PATENTSCOPE, CireSnave 2026-11-22): triage and claim reading
+
+Source: `C:/Projects/.lane-state/wipo-search-{1,2,3}.txt`, re-parsed in full by the lane: Search 1 = 99 of 99,
+Search 3 = 28 of 28, **Search 2 = 200 of 275 only** (the export was capped at 200 per page; ranks 201-275 are not in the
+file and are unread). Search 1 sits almost wholly inside Search 2 and is merged with the Espacenet hits by family
+(US10425316B2 = US2019/0104044 = WO2019/068107; US8917610B2 = US2012/0008506; US20090172155A1, US12231923B2 and
+US11406315B2 already read above). Triage by title and class (G08B, G16H, H04L 43, B60/B66 safety): the set is dominated by
+clusters/failover (about 90), ECG/cardiac (about 50), vehicles/drones (about 30). Search 3 (dead man) is dominated by
+vehicle, rail and lift operator-presence controls.
+
+## Q4 batch 1 (20 numbers; independent claims read to about 520-900 characters)
+
+| Number | Status (Google, not official) | Subject | Verdict |
+|---|---|---|---|
+| WO2019068107A1 (Nokia) | Ceased | same family as US10425316B2 | outside as read (ceased); see US10425316B2 "needs more" |
+| EP3445224A1 (Siemens Rail) | Active | operator heartbeat + movement incapacity check | outside as read (physiological operator check, no missed message) |
+| US20140365062A1 (Ford) | Active | missed dead-man switch -> escalating warnings to driver and road users, vehicle brakes | outside as read (vehicle, warnings local, driver-facing) |
+| US20150179033A1 (Intel) | Expired | component heartbeat, proximity zone, item security | outside as read; expired |
+| US20200105118A1 (MakuSafe) | Active | wearable sensing device (claim 1 is one line: sense environmental conditions) | outside as read |
+| EP2720210A1 (ABB) | Withdrawn | person in workspace by camera | outside as read; withdrawn |
+| US20190348167A1 (IBM) | Expired | health-data gap estimation | outside as read |
+| US20210217531A1 | Abandoned | ring sensor to cloud | outside as read |
+| US20120144018A1 (IBM) | Expired | dynamic-rate inter-node heartbeats | outside as read |
+| US20210053488A1 | Active | hands-on-wheel alert to the driver | outside as read |
+| US20150031962A1 (Ostar) | Active, est. exp. 2034 | medical device self-status to cloud | outside as read |
+| US20090131759A1 | Abandoned | life-sign wearables | outside as read |
+| US20230290193A1 (Denso) | Active | tamper detection | outside as read |
+| US20170293537A1 (NEC) | Expired | VM failure by traffic snooping | outside as read |
+| US20110196955A1 (Hitachi) | Expired | latest/history data for sleeping terminals | outside as read |
+| WO2017156492A1 (Origin Wireless) | Ceased | Wi-Fi CSI vital signs | outside as read |
+| US20230308887A1 (6Harmonics) | Abandoned | white-space transceiver heartbeat, emergency network access | outside as read; abandoned |
+| US6304774A | 404 on Google | (heart-rate monitor, 2001) | unread by number; title is physiological |
+
+Unread by number or by the export cap: CN122970019A, CN122672037A, CN122932157A, Search 2 ranks 201-275, and Indian
+applications 202241047519 (elderly wandering monitor, G08B) and 202121042624 (fatigue alert), 202111000114, 202117043468
+(Google Patents carries no text for these filings; need IPO India or a person).
+
+Result so far (Q3 and Q4, 56 distinct families read): none reads on (a)-(d) together. US10425316B2 remains "needs more".
+Nothing here is clearance: partial search, claim text only to 520-1000 characters per independent claim, machine
+translations for CN/JP/KR.
