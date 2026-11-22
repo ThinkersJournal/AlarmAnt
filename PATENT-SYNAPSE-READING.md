@@ -51,3 +51,29 @@ Not read: US20190140908, WO2013107137, CN101106535, US7788231, US7034696, US7119
 **Result:** still no claim found that covers a missed-heartbeat page; two further searches and three independents read. That is thin, not a clear. Two product families (uptime and heartbeat monitors) exist but are not patents and I have not read their patents.
 
 S6. The heartbeat is one-way and on one route: no acknowledgement the sender waits for, no retransmission over a second network, no failsafe action by the watched side.
+
+## Addendum 2026-11-22: a keyword search I can run (Google Patents query endpoint), dead-man and heartbeat round 2
+
+**What changed:** the lane found it can run Google Patents keyword searches (`patents.google.com/xhr/query`, US filings since 2000), so this round is a real keyword search, not web-search snippets. It is still **not** USPTO full text, Espacenet or PATENTSCOPE (not reachable from here), so the owed full-text search stays owed and **a person reads any hits**. Status and dates are Google's, not the official record.
+
+| # | Query (2026-11-22) | Relevant results |
+|---|---|---|
+| S5 | absence of heartbeat message, monitoring service pushes a notification to an administrator's phone | none on point; hits were medical/IoT (Philips US9351640, Intel US12132609) |
+| S6 | a user fails to check in in a time period, alert to an emergency contact | Masimo opioid family (the known 19/662,313 neighbours, constraints 13-16), Philips US10517479 |
+| S7 | an external monitor detects failure of the alerting system and notifies a person by an independent channel | none on point (vehicle, smart watch, gateway hits) |
+| S8 | a monitoring service expects a periodic ping, a missing ping triggers an alert | none on point (cloud, storage, robot hits) |
+| S9 | a scheduled job's check-in ping, alert when it does not arrive | none on point |
+| S10 | an on-call notification when a monitored message source stops sending | PagerDuty US20210304093 (abandoned) |
+
+| Patent | Holder; status (Google) | Independents read | Verdict |
+|---|---|---|---|
+| US9351640B2 | Philips (now Bt Wearables); Active, est. 2026-12-16 | 1, 12-18: fall detection from body-worn accelerometers through a base unit, requesting help with no button press | outside as read: no motion sensing, no fall detection, no base unit |
+| US10517479B2 | Philips; Expired per Google | 1, 7, 14, 20: wrist/accelerometer activity pattern sent to a second device that compares it with a reference | outside as read (and expired): no activity pattern or reference |
+| US11385951B2 | McAfee (now JPMorgan Chase); Active, est. 2037-12-18 | 1, 11, 17: **train an ML reference template on heartbeat patterns** from many nodes, then flag variance and trigger a resilience response | outside as read: needs ML training and a pattern template; ours is a fixed missed-beat deadline from one source (constraint S7) |
+| US20210304093A1 | PagerDuty; Abandoned | 31, 42, 47: a weighted operations-health **score** from interrupt events, with self-adjusting sub-score models | outside as read (and abandoned): no scoring, no models, no responder-pain metrics |
+
+Not read: Pulson US8961185, UF US10137245 and US9950112, Noonlight US10728732 (emergency assistance, claims not opened), Masimo family members beyond the known readings. **Result:** across S1-S10, no claim found that covers a plain fixed-deadline missed-heartbeat page; that is what the searches showed, not a clearance, and the commercial uptime-monitor products' own patents are still unread.
+
+S7. The watchdog's missed-beat rule is a fixed deadline per source: no learning, no baseline or pattern template, no score, no adaptive threshold.
+
+**Gate for the watchdog code (ruling 478):** this is the search the lane can run. The USPTO/Espacenet full-text half is not reachable from here; pm-ants asked that the lane run what it can and a person read any hits. **The lane's recommendation: the watchdog may proceed inside S4, S6 and S7, if the PM and CireSnave accept the reachable search as sufficient.** The lane starts no watchdog code until the PM says so.
