@@ -7,16 +7,16 @@ Workflow: Sonnet only; the PM stamps the version at merge and consumes the fragm
 
 IN FLIGHT:
 - #74 MERGED (0.4.0, 02:51Z): A10 `/alert` rate limit (BREAKING), `GET /alert/:id`, `tests/constraints.rs` (ruling 407-A guard), `bridge` module (admission caps, open-alert file, audit line; NOT wired), PATENT-SYNAPSE-READING.md (+ addendum S5-S10, constraint S7, queries Q1-Q4 for a person), Apache text. Branch and worktree removed. The portfolio sweep was red on main too (cause not isolated).
-- Branch `adapter-bridge` (worktree `AlarmAnt-wt-adapter`, pushed, no code yet): for `alarmant-bridge` (second binary) once a published `synapsed-client` newer than 6.0.0-rc.123 exists (crates.io has only rc.123, 2026-10-21). Plan from `docs/SYNAPSE-ADAPTER.md` 3.2 and 3.6: claim role `alarmant`, read mail, `Gate::admit`, `POST /alert`, poll `GET /alert/:id` every 20 s up to 24 h, send `[NOTICE] page-acked` / `page-refused` replies (reply ids derived from the alert id); on 409 `superseded` stop, never re-claim.
+- Branch `adapter-bridge` (worktree `AlarmAnt-wt-adapter`, pushed; holds A12 done, `windows-key-acl.md` fragment; no PR yet, next PR window 2026-11-23 UTC, [READY] to pm-assist cc pm-ants): for `alarmant-bridge` (second binary) once a published `synapsed-client` newer than 6.0.0-rc.123 exists (crates.io has only rc.123, 2026-10-21). Plan from `docs/SYNAPSE-ADAPTER.md` 3.2 and 3.6: claim role `alarmant`, read mail, `Gate::admit`, `POST /alert`, poll `GET /alert/:id` every 20 s up to 24 h, send `[NOTICE] page-acked` / `page-refused` replies (reply ids derived from the alert id); on 409 `superseded` stop, never re-claim.
 - NO WATCHDOG CODE (ruling 478, PM): board 490 is CireSnave's choice (A he runs queries Q1-Q4, B hold, C proceed; the PM recommends B).
 - Rulings in force: 407-A (proceed inside constraints 13-16; slips to refuse: slice (h) reporting "unregistered" or "permissions missing" to the escalator, any "FCM push failed, escalate now" shortcut). ROADMAP A13: quarterly note to the PM asking CireSnave about 19/662,313 (next 2027-02-21).
-- A8 (#70) merged: the first `android-v*` tag push waits for the PM's word and CireSnave's five secrets (board 462). ROADMAP A11 (PinTrustManager handshake test) and A12 (Windows key ACL) are open.
+- A8 (#70) merged: the first `android-v*` tag push waits for the PM's word and CireSnave's five secrets (board 462). ROADMAP A11 (PinTrustManager handshake test; Kotlin, needs a JDK keystore, only CI has ever run Kotlin tests) is open; A12 is done on `adapter-bridge`.
 
 WAIT: synapsed-client newer than 6.0.0-rc.123 on crates.io (then wire `alarmant-bridge` around `bridge`; pm-ants mails when it publishes) | check: curl -s https://crates.io/api/v1/crates/synapsed-client | wake: 2026-11-23T13:20:00+00:00
 
 NEXT, in order:
 1. When synapsed-client publishes: build `alarmant-bridge` on `adapter-bridge`.
-2. A11 and A12 if no client yet.
+2. A11 if no client yet (and open the 11-23 PR from `adapter-bridge`).
 3. Phone-session readiness needs a real device (board 354 Firebase, CireSnave).
 4. Owed: a person's confirmation of the patent readings (outside as read, partial); the sweep is incomplete.
 
