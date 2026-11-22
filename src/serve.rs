@@ -18,6 +18,7 @@ use crate::enroll::EnrollmentStore;
 use crate::escalate::Escalator;
 use crate::fcm::PushTransport;
 use crate::raise::{DeviceRegistry, response};
+use crate::ratelimit::{AlertLimiter, Decision};
 use crate::register::{DeviceStore, FailureLimiter};
 use crate::routes::{
     Clock, MAX_RAISE_BODY_BYTES, RegisterConfig, authorization, device_token_route, json_response,
@@ -38,6 +39,8 @@ pub struct App<T, D> {
     pub dispatcher: Arc<Dispatcher>,
     pub board: Arc<PcAlarmBoard>,
     pub limiter: Arc<FailureLimiter>,
+    /// The cap on `POST /alert` (ROADMAP A10).
+    pub alert_limiter: Arc<AlertLimiter>,
     pub clock: Clock,
 }
 
@@ -66,12 +69,21 @@ impl<T, D> App<T, D> {
             dispatcher: Arc::new(Dispatcher::new(Arc::clone(&board))),
             board,
             limiter: Arc::new(FailureLimiter::default()),
+            alert_limiter: Arc::new(AlertLimiter::default()),
             clock,
         }
     }
 }
 
 impl<T, D> App<T, D> {
+    /// Replaces the caps on `POST /alert` (defaults: 6 an hour, 20 a day per key owner).
+    pub fn with_alert_limits(self, limits: crate::ratelimit::RateLimits) -> Self {
+        App {
+            alert_limiter: Arc::new(AlertLimiter::new(limits)),
+            ..self
+        }
+    }
+
     /// Replaces the in-memory escalator with one backed by `store`: open alerts resume (a timer that
     /// came due while down fires once on the next tick) and every alert already at the PC-alarm
     /// stage goes back on the board, so a restart does not silently end the chain. The second
@@ -100,6 +112,7 @@ where
 {
     let server = alert_route(Server::new(), app);
     let server = ack_route(server, app);
+    let server = alert_state_route(server, app);
     let devices: Arc<dyn DeviceStore> = app.devices.clone();
     let server = register_route(
         server,
@@ -129,24 +142,78 @@ where
     D: DeviceRegistry + 'static,
 {
     let api_key = Arc::new(app.api_key.clone());
-    let (devices, transport, alerts, escalator, clock) = (
+    let (devices, transport, alerts, escalator, clock, alert_limiter) = (
         Arc::clone(&app.devices),
         Arc::clone(&app.transport),
         Arc::clone(&app.alerts),
         Arc::clone(&app.escalator),
         Arc::clone(&app.clock),
+        Arc::clone(&app.alert_limiter),
     );
     server.post("/alert", move |req: Request| {
-        let (api_key, devices, transport, alerts, escalator, clock) = (
+        let (api_key, devices, transport, alerts, escalator, clock, alert_limiter) = (
             Arc::clone(&api_key),
             Arc::clone(&devices),
             Arc::clone(&transport),
             Arc::clone(&alerts),
             Arc::clone(&escalator),
             Arc::clone(&clock),
+            Arc::clone(&alert_limiter),
         );
         async move {
             let auth = authorization(&req).map(str::to_owned);
+            // The rate limit comes AFTER authentication: a stranger's request is the usual 401 and spends
+            // nobody's budget; only the key's owner is counted (ROADMAP A10). A refusal sends no push.
+            let authenticated = auth
+                .as_deref()
+                .and_then(bearer_token)
+                .is_some_and(|t| api_key.matches(t));
+            if authenticated {
+                let owner = crate::ratelimit::DEFAULT_OWNER;
+                let now = clock();
+                if let Decision::Refused {
+                    dropped,
+                    notice_due,
+                    clears_at,
+                } = alert_limiter.check(owner, now)
+                {
+                    // Never a silent loss (pm-ants): the refusal names the owner and the count in the
+                    // answer and on stderr, and the first one in an hour pages the human, exempt from the cap.
+                    eprintln!("alarmant: alert refused (rate limit) owner={owner} dropped={dropped}");
+                    if notice_due {
+                        let notice = serde_json::json!({
+                            "title": format!("Alerts throttled for key owner {owner}"),
+                            "body": format!(
+                                "More than the allowed number of alerts came in; later ones are dropped (not sent) until {}. Look at the sender.",
+                                crate::ratelimit::utc_hhmm(clears_at)
+                            ),
+                        })
+                        .to_string();
+                        let sent = raise_escalating(
+                            &escalator,
+                            &api_key,
+                            auth.as_deref(),
+                            &notice,
+                            &*devices,
+                            &*transport,
+                            &*alerts,
+                            now,
+                        )
+                        .await;
+                        if response(&sent).0 != 202 {
+                            eprintln!("alarmant: the throttle notice could not be raised");
+                        }
+                    }
+                    return json_response(
+                        429,
+                        &serde_json::json!({
+                            "error": "too many alerts; try again later",
+                            "owner": owner,
+                            "dropped": dropped,
+                        }),
+                    );
+                }
+            }
             let Ok(bytes) = req.into_body().bytes(MAX_RAISE_BODY_BYTES).await else {
                 return json_response(413, &serde_json::json!({"error": "body too large"}));
             };
@@ -166,6 +233,38 @@ where
             .await;
             let (status, body) = response(&result);
             json_response(status, &body)
+        }
+    })
+}
+
+/// Adds `GET /alert/:alert_id`: the sender's read-only view of ONE alert, `{"state":"open"}` or
+/// `{"state":"acked"}` and nothing else (never the chain step, never a fetch: constraint 13). Same
+/// `Authorization: Bearer <API key>` as `POST /alert`. 401 for a bad key; 404 for an unknown id.
+fn alert_state_route<T, D>(server: Server, app: &App<T, D>) -> Server {
+    let (key, alerts) = (Arc::new(app.api_key.clone()), Arc::clone(&app.alerts));
+    server.get("/alert/:alert_id", move |req: Request| {
+        let (key, alerts) = (Arc::clone(&key), Arc::clone(&alerts));
+        async move {
+            let ok = authorization(&req)
+                .and_then(bearer_token)
+                .is_some_and(|k| key.matches(k));
+            if !ok {
+                return StatusCode::UNAUTHORIZED.into_response();
+            }
+            let record = req
+                .extensions()
+                .get::<PathParams>()
+                .and_then(|p| p.get("alert_id"))
+                .and_then(|id| alerts.get(id));
+            let Some(record) = record else {
+                return StatusCode::NOT_FOUND.into_response();
+            };
+            let state = if record.state == crate::AlertState::Acked {
+                "acked"
+            } else {
+                "open"
+            };
+            json_response(200, &serde_json::json!({ "state": state }))
         }
     })
 }
@@ -283,6 +382,7 @@ mod tests {
     use crate::enroll::MemoryEnrollments;
     use crate::fcm::{AlertMessage, DeviceToken, PushError, PushReceipt};
     use crate::raise::Device;
+    use crate::ratelimit::RateLimits;
     use crate::register::MemoryDevices;
     use httpant_client::Client;
     use std::future::Future;
@@ -391,6 +491,93 @@ mod tests {
             st,
             serde_json::from_str(&t).unwrap_or(serde_json::Value::Null),
         )
+    }
+
+    /// ROADMAP A10: the N+1th alert inside the window is refused with a fixed message and sends no push;
+    /// a wrong key neither raises nor spends the budget; the window moves with the clock.
+    #[tokio::test]
+    async fn the_alert_endpoint_is_rate_limited_per_key() {
+        let now = Arc::new(AtomicU64::new(10_000));
+        let app = app(Arc::clone(&now));
+        let srv = public_server(&app).bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", srv.addr());
+        let good = format!("Bearer {KEY}");
+        let body = r#"{"title":"t","body":"b"}"#;
+        // a stranger's calls are 401 and never spend the owner's budget, however many there are
+        for _ in 0..30 {
+            assert_eq!(
+                call(&base, "POST", "/alert", "Bearer nope", body).await.0,
+                401
+            );
+        }
+        let per_hour = RateLimits::default().per_hour;
+        for i in 0..per_hour {
+            let (st, _) = call(&base, "POST", "/alert", &good, body).await;
+            assert_eq!(st, 202, "alert {i} is inside the window");
+        }
+        let pushes = app.transport.0.lock().unwrap().len();
+        let (st, v) = call(&base, "POST", "/alert", &good, body).await;
+        assert_eq!(st, 429, "the N+1th alert in the hour is refused");
+        assert_eq!(
+            v["error"], "too many alerts; try again later",
+            "fixed message"
+        );
+        assert_eq!(v["owner"], "api", "the answer names the key owner");
+        assert_eq!(v["dropped"], 1, "and how many were lost");
+        // never silent: the FIRST refusal pages the human once (exempt from the cap), and the refused
+        // alert itself sends nothing
+        assert_eq!(
+            app.transport.0.lock().unwrap().len(),
+            pushes + 1,
+            "one throttle notice"
+        );
+        // later refusals in the same hour send nothing more but keep counting
+        for n in 2..=4 {
+            let (st, v) = call(&base, "POST", "/alert", &good, body).await;
+            assert_eq!(st, 429);
+            assert_eq!(v["dropped"], n);
+        }
+        assert_eq!(
+            app.transport.0.lock().unwrap().len(),
+            pushes + 1,
+            "the human is paged once, not once per refusal"
+        );
+        // an hour later the hourly window has moved on
+        now.store(10_000 + 3_601, Ordering::SeqCst);
+        assert_eq!(call(&base, "POST", "/alert", &good, body).await.0, 202);
+    }
+
+    /// `GET /alert/:id` answers open or acked and nothing else; a wrong key is 401, an unknown id 404.
+    #[tokio::test]
+    async fn the_alert_state_endpoint_answers_open_or_acked_only() {
+        let now = Arc::new(AtomicU64::new(1000));
+        let app = app(Arc::clone(&now));
+        let srv = public_server(&app).bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", srv.addr());
+        let good = format!("Bearer {KEY}");
+        let (st, v) = call(
+            &base,
+            "POST",
+            "/alert",
+            &good,
+            r#"{"title":"t","body":"b"}"#,
+        )
+        .await;
+        assert_eq!(st, 202);
+        let id = v["alert_id"].as_str().unwrap().to_owned();
+        let path = format!("/alert/{id}");
+        assert_eq!(call(&base, "GET", &path, "Bearer nope", "").await.0, 401);
+        assert_eq!(call(&base, "GET", "/alert/unknown", &good, "").await.0, 404);
+        let (st, v) = call(&base, "GET", &path, &good, "").await;
+        assert_eq!((st, v), (200, serde_json::json!({"state": "open"})));
+        // a step on the chain does not show: still just "open"
+        now.store(1000 + 61, Ordering::SeqCst);
+        tick_once(&app, 1000 + 61).await;
+        let (_, v) = call(&base, "GET", &path, &good, "").await;
+        assert_eq!(v, serde_json::json!({"state": "open"}));
+        app.alerts.mark_acked(&id, 1100);
+        let (st, v) = call(&base, "GET", &path, &good, "").await;
+        assert_eq!((st, v), (200, serde_json::json!({"state": "acked"})));
     }
 
     #[tokio::test]
