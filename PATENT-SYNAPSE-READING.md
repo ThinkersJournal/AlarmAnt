@@ -76,4 +76,4 @@ Not read: Pulson US8961185, UF US10137245 and US9950112, Noonlight US10728732 (e
 
 S7. The watchdog's missed-beat rule is a fixed deadline per source: no learning, no baseline or pattern template, no score, no adaptive threshold.
 
-**Gate for the watchdog code (ruling 478):** this is the search the lane can run. The USPTO/Espacenet full-text half is not reachable from here; pm-ants asked that the lane run what it can and a person read any hits. **The lane's recommendation: the watchdog may proceed inside S4, S6 and S7, if the PM and CireSnave accept the reachable search as sufficient.** The lane starts no watchdog code until the PM says so.
+**Gate for the watchdog code (ruling 478):** this is the search the lane can run. The USPTO/Espacenet full-text half is not reachable from here; pm-ants asked that the lane run what it can and a person read any hits. **Outside as read, partial search; never "clear".** pm-ants recommended (2026-11-22) holding watchdog code until a person reads USPTO, Espacenet and PATENTSCOPE hits; the question is with the PM for CireSnave. The lane starts no watchdog code.
