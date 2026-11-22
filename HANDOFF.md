@@ -11,7 +11,7 @@ IN FLIGHT:
 - PR #73 merged as 0.3.1 (note `docs/SYNAPSE-ADAPTER.md` in main; branch and worktree removed). No adapter/watchdog code until CireSnave answers (board 478); owed: USPTO full text and Espacenet heartbeat search (a person or a lane with access), a person confirming the readings.
 - A8 (#70) merged: first `android-v*` tag push waits for the PM's word and CireSnave's five secrets (board 462).
 
-PR WINDOW (not a wait, pm-ants 6.29): open ONE PR from `alert-rate-limit` at or after 2026-11-22T00:00Z (BREAKING A10; carries PATENT-SYNAPSE-READING.md, GET /alert/:id, tests/constraints.rs; fold `apache-text-fix.md` so there is one fragment), [READY] to pm-assist cc pm-ants. Keep committing on this branch meanwhile.
+PR #74 OPEN (0.4.0 stamped by pm-assist; gate armed): carries A10, GET /alert/:id, tests/constraints.rs, `bridge` module (pure logic, not wired), PATENT-SYNAPSE-READING.md + addendum S5-S10 / constraint S7, Apache text. Pull before any push, no force; no fragment file (stamp consumed it; add lines by hand under the CHANGELOG heading while #74 is open). Portfolio sweep red also on main@0bd783d. Keep committing on `alert-rate-limit`; next window's PR is cut from it.
 
 NEXT, in order:
 1. 11-21 UTC: open the note PR; run and record the patent reading (Part: inbound channel and heartbeat watchdog).
@@ -21,3 +21,6 @@ NEXT, in order:
 5. Owed: a person's confirmation of the patent readings (outside as read); the sweep is incomplete.
 
 Tools: `C:\Projects\tools\patent-claims.py <numbers>`; emulator AVD `alarm36` in `C:\Users\cires\lane-tools\alarmant`. Windows: use `python tools/check-fragment.py origin/main`; run `cargo fmt --check` before every push (CI fails on it). Many files here are CRLF: edit with a line-ending-aware script (`grep -c $'\r'` lies on this box).
+WAIT: #74 merge | check: gh pr view 74 --json state,mergedAt | wake: 2026-11-22T13:10:00+00:00
+WAIT: synapsed-client newer than 6.0.0-rc.123 on crates.io (then wire `alarmant-bridge` around `bridge`) | check: curl -s https://crates.io/api/v1/crates/synapsed-client | wake: 2026-11-22T13:20:00+00:00
+OPEN ASK to pm-ants (2026-11-22): may watchdog code start inside S4, S6, S7 on the reachable search? Until answered: NO watchdog code.
