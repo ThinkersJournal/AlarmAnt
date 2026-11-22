@@ -85,12 +85,12 @@ impl Refusal {
 
 /// What to raise through `POST /alert`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AlertText {
+pub struct BridgeAlert {
     pub title: String,
     pub body: String,
 }
 
-impl AlertText {
+impl BridgeAlert {
     /// The JSON body `POST /alert` takes.
     pub fn json(&self) -> String {
         serde_json::json!({"title": self.title, "body": self.body}).to_string()
@@ -146,7 +146,7 @@ impl Gate {
 
     /// Whether `m` may raise an alert at `now`, and what it says. Checks nothing it has to spend: the
     /// message counts only when [`Gate::raised`] is called after the alert was really raised.
-    pub fn admit(&mut self, m: &Incoming, now: u64) -> Result<AlertText, Refusal> {
+    pub fn admit(&mut self, m: &Incoming, now: u64) -> Result<BridgeAlert, Refusal> {
         if m.to != self.account {
             return Err(Refusal::NotHuman);
         }
@@ -170,7 +170,7 @@ impl Gate {
         if times.len() >= self.limits.per_sender_per_day {
             return Err(Refusal::DayLimit);
         }
-        Ok(AlertText {
+        Ok(BridgeAlert {
             title: format!("{from}: {}", strip_controls(&m.subject)),
             body: strip_controls(&m.body),
         })
