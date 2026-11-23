@@ -67,8 +67,8 @@ fn name_list(names: &str) -> Vec<String> {
 }
 
 /// Writes `bytes` to `path` through a temporary file and a rename, so a crash never leaves a
-/// half-written file at `path`. The key file is created owner-only on Unix; on Windows it
-/// inherits the data directory's permissions, so that directory must be private to the operator.
+/// half-written file at `path`. The key file is created owner-only: `0600` on Unix, and on Windows
+/// inherited access is removed and only the current user is granted access (ROADMAP A12).
 fn write_atomic(path: &std::path::Path, bytes: &[u8], private: bool) -> Result<(), &'static str> {
     use std::io::Write;
     let tmp = path.with_extension("tmp");
@@ -82,12 +82,53 @@ fn write_atomic(path: &std::path::Path, bytes: &[u8], private: bool) -> Result<(
     #[cfg(not(unix))]
     let _ = private;
     o.open(&tmp)
-        .and_then(|mut f| f.write_all(bytes).and_then(|()| f.sync_all()))
+        .and_then(|mut f| {
+            // The file is empty here: narrow its access before any key byte is written to it.
+            if private {
+                owner_only_windows(&tmp)?;
+            }
+            f.write_all(bytes).and_then(|()| f.sync_all())
+        })
         .and_then(|()| std::fs::rename(&tmp, path))
         .map_err(|_| {
             let _ = std::fs::remove_file(&tmp);
-            "a TLS file could not be written to the data directory"
+            "a TLS file could not be written to the data directory (on Windows: or its access could not be limited to the current user)"
         })
+}
+
+/// ROADMAP A12: on Windows, drops inherited access from `path` and grants Full control to the current
+/// user only (`icacls`, so no unsafe code). A failure is an error, never a key left readable by others.
+/// Nothing to do elsewhere (Unix creates the file `0600`).
+#[cfg(windows)]
+fn owner_only_windows(path: &std::path::Path) -> std::io::Result<()> {
+    let user = std::env::var("USERNAME").map_err(|_| std::io::Error::other("no USERNAME"))?;
+    let who = match std::env::var("USERDOMAIN") {
+        Ok(d) if !d.is_empty() => format!("{d}\\{user}"),
+        _ => user,
+    };
+    let out = std::process::Command::new("icacls")
+        .arg(path)
+        // An elevated process's default access list names SYSTEM and Administrators outright
+        // (not inherited), so drop those too, then grant the current user; order matters.
+        .args([
+            "/inheritance:r",
+            "/remove:g",
+            "*S-1-5-18",
+            "*S-1-5-32-544",
+            "/grant:r",
+        ])
+        .arg(format!("{who}:F"))
+        .output()?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other("icacls failed"))
+    }
+}
+
+#[cfg(not(windows))]
+fn owner_only_windows(_: &std::path::Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 /// The self-signed pair in `dir`, for exactly `names` (IPs become IP subject alternative names).
@@ -245,6 +286,39 @@ mod tests {
         let (other, _) = pair();
         assert_ne!(f, fingerprint_hex(other.as_bytes()).unwrap());
         assert!(fingerprint_hex(b"nope").is_err());
+    }
+
+    /// ROADMAP A12: on Windows the key file's access list names the current user and no one else
+    /// (no inherited `Users`, `Everyone` or `Authenticated Users` entry).
+    #[cfg(windows)]
+    #[test]
+    fn the_private_key_is_readable_by_the_current_user_only_on_windows() {
+        let d = tempfile::tempdir().unwrap();
+        let (_, key) = self_signed_in(d.path(), "127.0.0.1").unwrap();
+        let out = std::process::Command::new("icacls")
+            .arg(&key)
+            .output()
+            .unwrap();
+        let acl = String::from_utf8_lossy(&out.stdout).to_string();
+        let user = std::env::var("USERNAME").unwrap().to_lowercase();
+        let entries: Vec<&str> = acl.lines().filter(|l| l.contains(":(")).collect();
+        assert_eq!(entries.len(), 1, "one access entry only: {acl}");
+        // the first line starts with the file's own path (which has `Users` in it): look past it
+        let entry = entries[0].replace(&key, "").to_lowercase();
+        assert!(entry.contains(&user), "{acl}");
+        for other in [
+            "users",
+            "everyone",
+            "authenticated users",
+            "system",
+            "administrators",
+        ] {
+            assert!(!entry.contains(other), "{other} in {acl}");
+        }
+        // the key still works after the narrowing
+        assert!(
+            acceptor_from_files(&d.path().join("tls-cert.pem").display().to_string(), &key).is_ok()
+        );
     }
 
     #[test]
