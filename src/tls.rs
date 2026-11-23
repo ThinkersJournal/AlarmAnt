@@ -108,7 +108,15 @@ fn owner_only_windows(path: &std::path::Path) -> std::io::Result<()> {
     };
     let out = std::process::Command::new("icacls")
         .arg(path)
-        .args(["/inheritance:r", "/grant:r"])
+        // An elevated process's default access list names SYSTEM and Administrators outright
+        // (not inherited), so drop those too, then grant the current user; order matters.
+        .args([
+            "/inheritance:r",
+            "/remove:g",
+            "*S-1-5-18",
+            "*S-1-5-32-544",
+            "/grant:r",
+        ])
         .arg(format!("{who}:F"))
         .output()?;
     if out.status.success() {
