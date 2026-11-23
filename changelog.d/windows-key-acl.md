@@ -1,3 +1,0 @@
-kind: Fixed: on Windows `tls-key.pem` is limited to the current user (ROADMAP A12)
----
-The self-signed key was created owner-only on Unix (`0600`) but on Windows inherited the data directory's access list. It is now written with inherited access removed and Full control granted to the current user only (`icacls`, no unsafe code), before any key byte is written; a failure to do so is an error, not a key left readable. Side effect: `SYSTEM` and `Administrators` no longer have an entry on the file (an operator who needs a backup runs it as the service user). Red first: with the narrowing stubbed out the new Windows test failed on an inherited entry (`CodexSandboxUsers:(I)(M)`); 221 tests pass, fmt and clippy clean. Windows only; not run on a service account.
