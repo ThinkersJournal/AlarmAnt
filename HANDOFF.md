@@ -5,7 +5,6 @@ STATE (2026-11-24, main 0.4.1 after #75): FULL SPEED. Branch lane/alarmant-bridg
 RULES (PM): phone never reports "received"/"viewed", only Acknowledge; no Decline or negative status (PATENT-SWEEP constraints 13-22); escalation on a fixed timer only; any change needs a fresh patent reading and the PM's OK. Say "outside as read" (and "partial search"), never "clear"; not legal advice. Secrets never in repo, argv or logs.
 Workflow: Sonnet only; the PM stamps the version at merge and consumes the fragment; never edit Cargo.toml version or Cargo.lock (a new dependency's lock entry excepted). Pull before push (merge, never force: the PM stamps onto the branch). Sign PR bodies `— lane: alarmant`. Primary stays on `main`; branches in `C:\Projects\AlarmAnt-wt-<topic>`. One PR per UTC day. Messages: compact format. Clean worktree+branch after each merge. crates.io needs a User-Agent on curl (`-A`).
 
-WAIT: none
 
 NEXT:
 1. Push lane/alarmant-bridge; the day PR opens 2026-11-25 00:00Z or later (150k diff ceiling: Cargo.lock grows ~2000 lines for synapsed-client; check `git diff --stat origin/main`). Send [READY] to pm-assist cc pm-ants. Open items: a live daemon test (SYNAPSE_HOME, role alarmant); a pinned-subject/ack-on-behalf swap if Synapse builds it; README/run notes for the bridge env vars.
