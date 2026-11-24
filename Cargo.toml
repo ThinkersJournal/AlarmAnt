@@ -17,6 +17,7 @@ persistant = "0.17.12"
 rcgen = "0.14.10"
 ring = "0.17.14"
 serde_json = "1"
+synapsed-client = "6.0.0-rc.266"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time"] }
 
 [dev-dependencies]

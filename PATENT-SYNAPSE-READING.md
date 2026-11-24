@@ -92,3 +92,13 @@ S7. The watchdog's missed-beat rule is a fixed deadline per source: no learning,
 | Q4 | PATENTSCOPE | patentscope.wipo.int, Advanced search | `CL:(heartbeat AND (missing OR absent OR timeout) AND (alert OR notification OR page)) AND PD:[2000 TO 2026]` and `CL:("dead man" AND (notify OR alert))` | same as Q1, in a WO application (read the national phase list; a PCT application alone grants nothing) |
 
 **How to read a hit (for the person):** open the claims, find each independent claim (the ones that do not say "of claim N"), and ask whether the claim, as written, needs only steps (a)-(d). If it needs anything more, it is not a stopping hit; write the publication number and "needs more" beside it. If it needs only (a)-(d), flag it, and the work stops until the PM decides. Status (granted, pending, expired, abandoned) goes beside every number: an expired or abandoned hit does not stop the work.
+
+## Addendum 2026-11-24: two Chinese filings read by the PM (board 490)
+
+**Source:** the PM's reading of claims CireSnave pasted; this lane read no claim text itself. A model reading, not legal advice. Both verdicts are **outside as read**.
+
+**CN122885272A.** Only claim 1 is independent (claim 10 is the same method as a system). It needs a risk-control decision engine's feature query; a data source registry with a heartbeat snapshot; a comparison against an available-feature catalog that yields instant and missing lists; a persisted asynchronous backfill task; and, when the heartbeat recovers (failures reset to 0), a re-request of the missing features (limbs a to e). AlarmAnt has none of these: its heartbeat only pages a person. **Outside as read.**
+
+**CN122970019A.** Only claim 1 is independent. It needs UDP heartbeat messages with sequence numbers, an expected time-slot sequence, sliding observation-window statistics, a device communication status, and a cycle-adjustment instruction sent to the device with a version and an activation confirmation (S400). AlarmAnt has no UDP, no slot machinery, no reception-rate statistics, no adaptive cycle and no handshake. **Outside as read.**
+
+**Constraint kept (pm-ants, 2026-11-24):** S6. No adaptive or server-negotiated heartbeat cycle, no UDP liveness and no presence or reachability probe of the target phone, without asking first. `alarmant-bridge` honours S2 as well: it sends no delivery, failure or expiry report, so `no-device` and `server-down` (listed in `docs/SYNAPSE-ADAPTER.md` 3.2) are never sent.
