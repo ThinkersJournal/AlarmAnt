@@ -213,6 +213,11 @@ impl Watchdog {
         Ok(end)
     }
 
+    /// When the running maintenance pause ends, if one is running.
+    pub fn paused_until(&self) -> Option<u64> {
+        self.paused_until
+    }
+
     /// Whether a component has an open watchdog alert.
     pub fn is_open(&self, component: Component) -> bool {
         match component {

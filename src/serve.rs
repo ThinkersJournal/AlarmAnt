@@ -25,6 +25,7 @@ use crate::routes::{
     register_route,
 };
 use crate::second::SecondError;
+use crate::watchstate::{WatchState, watchdog_step};
 use crate::wire::{acknowledge_escalating, raise_escalating};
 
 /// Everything the service shares between its routes and its timer.
@@ -41,6 +42,8 @@ pub struct App<T, D> {
     pub limiter: Arc<FailureLimiter>,
     /// The cap on `POST /alert` (ROADMAP A10).
     pub alert_limiter: Arc<AlertLimiter>,
+    /// The watchdog (observer A), when its key is configured.
+    pub watch: Option<Arc<WatchState>>,
     pub clock: Clock,
 }
 
@@ -70,6 +73,7 @@ impl<T, D> App<T, D> {
             board,
             limiter: Arc::new(FailureLimiter::default()),
             alert_limiter: Arc::new(AlertLimiter::default()),
+            watch: None,
             clock,
         }
     }
@@ -80,6 +84,15 @@ impl<T, D> App<T, D> {
     pub fn with_alert_limits(self, limits: crate::ratelimit::RateLimits) -> Self {
         App {
             alert_limiter: Arc::new(AlertLimiter::new(limits)),
+            ..self
+        }
+    }
+
+    /// Turns the watchdog on: `POST /heartbeat` with `key`, and its page step in [`tick_once`].
+    pub fn with_watchdog(self, key: AckToken) -> Self {
+        let now = (self.clock)();
+        App {
+            watch: Some(Arc::new(WatchState::new(key, now))),
             ..self
         }
     }
@@ -126,6 +139,12 @@ where
     );
     let server = device_token_route(server, devices);
     let server = pc_ack_route(server, app);
+    let server = match &app.watch {
+        Some(w) => {
+            crate::heartbeat::heartbeat_route(server, w.heartbeat_config(Arc::clone(&app.clock)))
+        }
+        None => server,
+    };
     pc_alarm_route(
         server,
         PcAlarmConfig {
@@ -366,6 +385,17 @@ where
         let mut e = app.escalator.lock().unwrap_or_else(|p| p.into_inner());
         e.tick(now, &*app.dispatcher);
     }
+    if let Some(w) = &app.watch {
+        watchdog_step(
+            w,
+            &*app.devices,
+            &*app.transport,
+            &*app.alerts,
+            &app.escalator,
+            now,
+        )
+        .await;
+    }
     drain_second(
         &app.dispatcher,
         &*app.devices,
@@ -437,6 +467,46 @@ mod tests {
             1,
             Arc::new(move || now.load(Ordering::SeqCst)),
         )
+    }
+
+    #[tokio::test]
+    async fn the_heartbeat_route_exists_only_when_the_watchdog_is_configured() {
+        let hb = "heartbeat-key-0123456789-0123456789";
+        let body = r#"{"synapse":"up","canary":"ok","bridge":"up"}"#;
+        for (watch, want) in [(true, 200), (false, 404)] {
+            let mut a = app(Arc::new(AtomicU64::new(5)));
+            if watch {
+                a = a.with_watchdog(AckToken::new(hb));
+            }
+            let srv = public_server(&a).bind("127.0.0.1:0").await.unwrap();
+            let got = Client::new()
+                .post(format!("http://{}/heartbeat", srv.addr()))
+                .header("authorization", format!("Bearer {hb}"))
+                .body(body)
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16();
+            assert!(
+                got == want || (!watch && got == 405),
+                "watch={watch} got {got}"
+            );
+            // the API key does not open it
+            if watch {
+                let got = Client::new()
+                    .post(format!("http://{}/heartbeat", srv.addr()))
+                    .header("authorization", format!("Bearer {KEY}"))
+                    .body(body)
+                    .send()
+                    .await
+                    .unwrap()
+                    .status()
+                    .as_u16();
+                assert_eq!(got, 401, "the API key is not the heartbeat key");
+            }
+            srv.shutdown().await.unwrap();
+        }
     }
 
     #[test]

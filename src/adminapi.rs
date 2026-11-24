@@ -144,7 +144,7 @@ pub async fn bind_loopback(server: Server, addr: SocketAddr) -> Result<RunningSe
         .map_err(|_| BindError::Bind)
 }
 
-fn is_loopback_base(base: &str) -> bool {
+pub(crate) fn is_loopback_base(base: &str) -> bool {
     let Some(rest) = base.strip_prefix("http://") else {
         return false;
     };

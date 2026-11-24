@@ -5,7 +5,7 @@
 //! Environment for `serve`: `ALARMANT_BIND` (public address, required), `ALARMANT_DATA_DIR`,
 //! `ALARMANT_SERVICE_ACCOUNT_FILE`, `ALARMANT_API_KEY`, `ALARMANT_PC_KEY`, `ALARMANT_ADMIN_KEY` or
 //! `ALARMANT_ADMIN_KEY_FILE`, optional `ALARMANT_ADMIN_ADDR` (loopback, default 127.0.0.1:9100) and
-//! `ALARMANT_MINUTES` (default 5), `ALARMANT_RATE_PER_HOUR` and `ALARMANT_RATE_PER_DAY` (alerts a key owner may raise; default 6 and 20), and `ALARMANT_TLS_CERT_FILE` + `ALARMANT_TLS_KEY_FILE` (PEM; both or neither) to serve HTTPS itself.
+//! `ALARMANT_MINUTES` (default 5), `ALARMANT_HEARTBEAT_KEY` (turns the watchdog on: `POST /heartbeat`; must differ from every other key), `ALARMANT_RATE_PER_HOUR` and `ALARMANT_RATE_PER_DAY` (alerts a key owner may raise; default 6 and 20), and `ALARMANT_TLS_CERT_FILE` + `ALARMANT_TLS_KEY_FILE` (PEM; both or neither) to serve HTTPS itself.
 //! `ALARMANT_TLS_SELF_SIGNED_NAMES` (IPs and host names, comma-separated) instead makes a self-signed pair in the data directory. For `enroll`, `ALARMANT_PUBLIC_URL`
 //! (the `https://` address the phone uses) makes the client print the full enrol link, with the pin when a self-signed pair exists in `ALARMANT_DATA_DIR`. The client commands read the admin key and address the same way.
 
@@ -94,6 +94,18 @@ async fn client(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// `alarmant watchdog pause --minutes N`: a planned stop is not an incident (1 to 60 minutes, audited by the service).
+async fn pause(args: &[String]) -> Result<(), String> {
+    let minutes = alarmant::watchstate::parse_pause(args)
+        .ok_or("usage: alarmant watchdog pause --minutes N (1 to 60)")?;
+    let base = format!("http://{}", admin_addr()?);
+    let text = alarmant::watchstate::send_pause(&base, &admin_key_text()?, minutes)
+        .await
+        .map_err(str::to_owned)?;
+    print!("{text}");
+    Ok(())
+}
+
 /// The caps on `POST /alert`: `ALARMANT_RATE_PER_HOUR` and `ALARMANT_RATE_PER_DAY`, default 6 and 20 (ROADMAP A10).
 fn alert_limits() -> Result<alarmant::ratelimit::RateLimits, String> {
     let mut l = alarmant::ratelimit::RateLimits::default();
@@ -143,26 +155,50 @@ async fn serve() -> Result<(), String> {
     let alerts = Arc::new(PersistedAlerts::open(&disk).map_err(|e| e.to_string())?);
     let enrollments = Arc::new(PersistedEnrollments::open(&disk).map_err(|e| e.to_string())?);
     let admin_addr = admin_addr()?;
+    let heartbeat_key = match env("ALARMANT_HEARTBEAT_KEY") {
+        None => None,
+        Some(_) => {
+            let k = key("ALARMANT_HEARTBEAT_KEY")?;
+            if [&api_key, &pc_key, &admin_key]
+                .iter()
+                .any(|o| o.same_digest(&k))
+            {
+                return Err("ALARMANT_HEARTBEAT_KEY must differ from the other keys".to_owned());
+            }
+            Some(k)
+        }
+    };
 
     let clock = system_clock();
     let escalations = PersistedEscalations::open(&disk).map_err(|e| e.to_string())?;
-    let app = Arc::new(
-        App::new(
-            api_key,
-            pc_key,
-            Arc::clone(&devices),
-            alerts.clone(),
-            enrollments.clone(),
-            Arc::new(transport),
-            minutes,
+    let mut app = App::new(
+        api_key,
+        pc_key,
+        Arc::clone(&devices),
+        alerts.clone(),
+        enrollments.clone(),
+        Arc::new(transport),
+        minutes,
+        Arc::clone(&clock),
+    )
+    .with_escalations(minutes, Box::new(escalations))
+    .with_alert_limits(alert_limits()?);
+    if let Some(k) = heartbeat_key {
+        app = app.with_watchdog(k);
+    }
+    let app = Arc::new(app);
+    let admin_server = match &app.watch {
+        Some(w) => alarmant::watchstate::watchdog_admin_routes(
+            Server::new(),
+            admin_key.clone(),
+            Arc::clone(w),
             Arc::clone(&clock),
-        )
-        .with_escalations(minutes, Box::new(escalations))
-        .with_alert_limits(alert_limits()?),
-    );
+        ),
+        None => Server::new(),
+    };
     let _admin = bind_loopback(
         admin_routes(
-            Server::new(),
+            admin_server,
             AdminConfig {
                 admin_key,
                 enrollments,
@@ -217,7 +253,8 @@ async fn main() -> ExitCode {
     let result = match args.first().map(String::as_str) {
         Some("serve") if args.len() == 1 => serve().await,
         Some("enroll" | "revoke") => client(&args).await,
-        _ => Err("usage: alarmant serve | enroll|revoke --contact first|second".to_owned()),
+        Some("watchdog") => pause(&args).await,
+        _ => Err("usage: alarmant serve | enroll|revoke --contact first|second | watchdog pause --minutes N".to_owned()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
