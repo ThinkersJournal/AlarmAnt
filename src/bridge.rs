@@ -410,6 +410,14 @@ pub fn parse_envelope(from: &str, message_id: &str, text: &str) -> Result<Incomi
     })
 }
 
+/// Whether a message is the bridge's own kind of reply: it is acknowledged and dropped, never answered, so
+/// the bridge cannot answer its own replies for ever.
+/// Found by the live smoke run of 2026-11-24, where a refusal sent to the bridge's own role was read as
+/// incoming mail and refused in turn.
+pub fn is_own_traffic(text: &str) -> bool {
+    text.starts_with("[NOTICE] page-acked ") || text.starts_with("[NOTICE] page-refused ")
+}
+
 /// `YYYY-MM-DDTHH:MM:SSZ` for Unix seconds (no clock of its own, so no chrono).
 pub fn utc(secs: u64) -> String {
     let (days, rem) = ((secs / DAY) as i64, secs % DAY);
@@ -719,6 +727,14 @@ mod tests {
             );
         }
         assert_eq!(Refusal::Malformed.code(), "malformed");
+    }
+
+    #[test]
+    fn the_bridges_own_replies_are_never_answered() {
+        assert!(is_own_traffic("[NOTICE] page-refused affects=x"));
+        assert!(is_own_traffic("[NOTICE] page-acked affects=x"));
+        assert!(!is_own_traffic("[NOTICE] topic to=c urgency=high"));
+        assert!(!is_own_traffic("[ASK] page-refused to=c urgency=high"));
     }
 
     #[test]

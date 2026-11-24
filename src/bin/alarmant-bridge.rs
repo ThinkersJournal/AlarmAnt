@@ -21,8 +21,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use alarmant::bridge::{
-    AuditEvent, BridgeLimits, Gate, Incoming, Refusal, Reply, audit_line, load_open,
-    parse_envelope, reply_acked, reply_refused, save_open,
+    AuditEvent, BridgeLimits, Gate, Incoming, Refusal, Reply, audit_line, is_own_traffic,
+    load_open, parse_envelope, reply_acked, reply_refused, save_open,
 };
 use alarmant::bridgeclient::{AlertState, BridgeClient};
 use base64::Engine;
@@ -59,7 +59,10 @@ fn send(daemon: &Daemon, r: &Reply) -> Result<(), MailError> {
         "body_b64": B64.encode(r.text.as_bytes()),
         "mode": "L1:message-formats/1",
     });
-    daemon.call(ROLE, "/v1/send", Some(&body)).map(|_| ())
+    daemon
+        .call(ROLE, "/v1/send", Some(&body))
+        .map(|_| ())
+        .inspect_err(|e| eprintln!("alarmant-bridge: send {}: {e}", r.message_id))
 }
 
 fn env(name: &str) -> Result<String, String> {
@@ -182,6 +185,7 @@ fn handle(
         daemon
             .call(ROLE, "/v1/ack", Some(&json!({"message_id": id})))
             .map(|_| ())
+            .inspect_err(|e| eprintln!("alarmant-bridge: ack {id}: {e}"))
     };
     let refuse = |m: &Incoming, why: Refusal| -> Result<(), MailError> {
         audit(
@@ -199,6 +203,9 @@ fn handle(
         subject: String::new(),
         body: String::new(),
     };
+    if is_own_traffic(text.as_deref().unwrap_or_default()) {
+        return ack();
+    }
     let Some(text) = text else {
         return refuse(&bare(), Refusal::Malformed);
     };
