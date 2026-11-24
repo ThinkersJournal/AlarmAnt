@@ -76,7 +76,7 @@ Not read: Pulson US8961185, UF US10137245 and US9950112, Noonlight US10728732 (e
 
 S7. The watchdog's missed-beat rule is a fixed deadline per source: no learning, no baseline or pattern template, no score, no adaptive threshold.
 
-**Gate for the watchdog code (ruling 478):** this is the search the lane can run. The USPTO/Espacenet full-text half is not reachable from here; pm-ants asked that the lane run what it can and a person read any hits. **Outside as read, partial search; never "clear".** pm-ants recommended (2026-11-22) holding watchdog code until a person reads USPTO, Espacenet and PATENTSCOPE hits; the question is with the PM for CireSnave. The lane starts no watchdog code.
+**Gate for the watchdog code (ruling 478):** this is the search the lane can run. The USPTO/Espacenet full-text half is not reachable from here; pm-ants asked that the lane run what it can and a person read any hits. **Outside as read, partial search; never "clear".** pm-ants recommended (2026-11-22) holding watchdog code until a person reads USPTO, Espacenet and PATENTSCOPE hits; the question is with the PM for CireSnave. The lane starts no watchdog code. **Superseded 2026-11-24 by the ruling recorded below (board 490 C).**
 
 ## Queries for a person to run (board 490, option A; written 2026-11-22 at pm-ants's task)
 
@@ -102,3 +102,13 @@ S7. The watchdog's missed-beat rule is a fixed deadline per source: no learning,
 **CN122970019A.** Only claim 1 is independent. It needs UDP heartbeat messages with sequence numbers, an expected time-slot sequence, sliding observation-window statistics, a device communication status, and a cycle-adjustment instruction sent to the device with a version and an activation confirmation (S400). AlarmAnt has no UDP, no slot machinery, no reception-rate statistics, no adaptive cycle and no handshake. **Outside as read.**
 
 **Constraint kept (pm-ants, 2026-11-24):** S6. No adaptive or server-negotiated heartbeat cycle, no UDP liveness and no presence or reachability probe of the target phone, without asking first. `alarmant-bridge` honours S2 as well: it sends no delivery, failure or expiry report, so `no-device` and `server-down` (listed in `docs/SYNAPSE-ADAPTER.md` 3.2) are never sent.
+
+## Ruling 2026-11-24: board 490 C, the watchdog hold is released
+
+**CireSnave 2026-11-24, verbatim (relayed by the PM):** "490: C". The patent hold on the watchdog (`docs/SYNAPSE-ADAPTER.md` section 5) is released: the lane may build, enable and publish it. Option A (the Q1-Q4 queries above) was not run.
+
+**Readings on file:** CN122885272A and CN122970019A are both **outside as read** (PM readings of CireSnave's pastes, kept in board 490 in the decided archive; the addendum above restates them). This lane read no claim text of either.
+
+**Two gaps, recorded and not closed:** (1) PATENTSCOPE Search 2, result ranks 201-275, was never exported, so it was not read; (2) earlier families were read to 520-1000 characters of claim text, not in full. The result stays **outside as read, partial search; never "clear"**; not legal advice.
+
+**Still binding:** S4, S6 and S7 (S7: a fixed deadline per source; no learning, baseline or score). Nothing feeds "device offline" into escalation or into removing a target. No adaptive or server-negotiated heartbeat cycle, no UDP liveness, no presence or reachability probe of the target phone. AlarmAnt is never pointed at a provider's customer-premises equipment without a fresh reading of Nokia US 10,425,316. Build order: the heartbeat route with its own key; observer A, then B, then C (C needs CireSnave to create the external account, which goes on the board when the lane is ready, not before).
