@@ -119,7 +119,12 @@ fn the_escalator_takes_only_a_raise_an_ack_and_the_timer() {
 #[test]
 fn the_server_has_no_route_that_takes_a_phone_or_pc_status() {
     let mut routes = Vec::new();
-    for f in ["src/serve.rs", "src/routes.rs", "src/channel.rs"] {
+    for f in [
+        "src/serve.rs",
+        "src/routes.rs",
+        "src/channel.rs",
+        "src/heartbeat.rs",
+    ] {
         for l in read(f).lines() {
             let l = l.trim();
             for verb in ["post", "put", "get"] {
@@ -141,6 +146,8 @@ fn the_server_has_no_route_that_takes_a_phone_or_pc_status() {
         "GET /pc/alarm",
         "POST /ack/:alert_id",
         "POST /alert",
+        // the bridge's own-key heartbeat (board 490 C, 2026-11-24): fixed shape, not a phone or PC status
+        "POST /heartbeat",
         "POST /pc/ack/:alert_id",
         "POST /register",
         "PUT /device/token",
