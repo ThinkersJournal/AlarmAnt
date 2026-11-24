@@ -24,6 +24,7 @@ mod win {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::Duration;
 
+    use alarmant::hostwatch::{CHECK_SECS, HealthWatcher, Notice, terminal_notice};
     use alarmant::pcclient::{PcClient, Siren, Watcher};
     use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
     use windows::Win32::Media::Audio::{
@@ -146,6 +147,24 @@ mod win {
         });
     }
 
+    /// Observer B's dialog: the server stopped answering; Stop only silences the siren (nothing is sent).
+    fn show_server_down_dialog(clicked: Arc<AtomicBool>) {
+        std::thread::spawn(move || {
+            // SAFETY: a blocking message box with static text, no owner window.
+            unsafe {
+                MessageBoxW(
+                    None,
+                    w!(
+                        "The AlarmAnt server has not answered 3 checks in a row, so phone alerts cannot be sent. Click OK to stop this alarm."
+                    ),
+                    w!("AlarmAnt server down"),
+                    MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND,
+                );
+            }
+            clicked.store(true, Ordering::SeqCst);
+        });
+    }
+
     pub async fn run() -> Result<(), String> {
         let base =
             std::env::var("ALARMANT_PC_SERVER").map_err(|_| "ALARMANT_PC_SERVER is not set")?;
@@ -166,6 +185,10 @@ mod win {
         let mut watcher = Watcher::new(WinSiren { wav: siren_wav() });
         let clicked = Arc::new(AtomicBool::new(false));
         let mut ids: Vec<String> = Vec::new();
+        // Observer B: a check of the server every CHECK_SECS, three failures sound this PC's own siren.
+        let mut health = HealthWatcher::new(WinSiren { wav: siren_wav() });
+        let health_clicked = Arc::new(AtomicBool::new(false));
+        let mut next_check = std::time::Instant::now();
         eprintln!("alarmant-pc: watching");
         loop {
             if clicked.swap(false, Ordering::SeqCst) {
@@ -173,6 +196,18 @@ mod win {
                 for id in &ids {
                     // Retried by the next poll if it fails: the alert is still listed then.
                     let _ = client.acknowledge(id).await;
+                }
+            }
+            if health_clicked.swap(false, Ordering::SeqCst) {
+                health.operator_stop();
+            }
+            if std::time::Instant::now() >= next_check {
+                next_check += Duration::from_secs(CHECK_SECS);
+                if let Some(n) = health.observe(client.healthy().await) {
+                    eprintln!("alarmant-pc: {}", terminal_notice(n));
+                    if n == Notice::ServerDown {
+                        show_server_down_dialog(Arc::clone(&health_clicked));
+                    }
                 }
             }
             let polled = client.active().await;

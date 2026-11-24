@@ -16,6 +16,7 @@ pub mod enroll;
 pub mod escalate;
 pub mod fcm;
 pub mod heartbeat;
+pub mod hostwatch;
 pub mod pcclient;
 pub mod persist;
 pub mod push;

@@ -83,6 +83,9 @@ fn the_pc_program_sends_only_acknowledge() {
     let src = read("src/pcclient.rs");
     assert_eq!(count(&src, ".post("), 1, "one outgoing POST");
     assert!(src.contains("/pc/ack/"));
+    // `.get(` is the alarm list and the health check (observer B): both only ask, neither reports
+    assert_eq!(count(&src, ".get(format!(\"{}/pc/alarm\""), 1);
+    assert_eq!(count(&src, ".get(format!(\"{}/health\""), 1);
     for verb in [".put(", ".patch(", ".delete("] {
         assert_eq!(count(&src, verb), 0, "{verb}");
     }
@@ -143,6 +146,8 @@ fn the_server_has_no_route_that_takes_a_phone_or_pc_status() {
     routes.dedup();
     let known = [
         "GET /alert/:alert_id",
+        // observer B: no key, fixed text, records nothing (board 490 C)
+        "GET /health",
         "GET /pc/alarm",
         "POST /ack/:alert_id",
         "POST /alert",

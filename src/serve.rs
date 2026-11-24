@@ -126,6 +126,7 @@ where
     let server = alert_route(Server::new(), app);
     let server = ack_route(server, app);
     let server = alert_state_route(server, app);
+    let server = health_route(server);
     let devices: Arc<dyn DeviceStore> = app.devices.clone();
     let server = register_route(
         server,
@@ -253,6 +254,21 @@ where
             let (status, body) = response(&result);
             json_response(status, &body)
         }
+    })
+}
+
+/// Adds `GET /health` (observer B): no key, fixed text `ok`, and it records and reads nothing, so it
+/// cannot be a liveness signal about the PC or the phone (constraint 13).
+fn health_route(server: Server) -> Server {
+    server.get("/health", |_req: Request| async {
+        let mut res = Response::new(httpant_server::core::Body::from_bytes(
+            crate::hostwatch::HEALTH_TEXT,
+        ));
+        res.headers_mut().insert(
+            httpant_server::core::http::header::CONTENT_TYPE,
+            httpant_server::core::http::header::HeaderValue::from_static("text/plain"),
+        );
+        res
     })
 }
 
@@ -467,6 +483,20 @@ mod tests {
             1,
             Arc::new(move || now.load(Ordering::SeqCst)),
         )
+    }
+
+    #[tokio::test]
+    async fn health_answers_the_fixed_text_without_a_key() {
+        let a = app(Arc::new(AtomicU64::new(5)));
+        let srv = public_server(&a).bind("127.0.0.1:0").await.unwrap();
+        let res = Client::new()
+            .get(format!("http://{}/health", srv.addr()))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status().as_u16(), 200);
+        assert_eq!(res.text().await.unwrap(), "ok");
+        srv.shutdown().await.unwrap();
     }
 
     #[tokio::test]
