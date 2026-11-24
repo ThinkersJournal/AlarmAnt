@@ -94,18 +94,20 @@ The adapter raises an ordinary alert, so AlarmAnt's chain (first app, second app
 | Observer | Runs on | Watches | If it sees a failure |
 |---|---|---|---|
 | **A: server-side dead-man** | the VPS (the phone server) | a **heartbeat** from the bridge | pages the phone **directly** through the normal alert path (Synapse and the PC are not involved) |
-| **B: PC-side check** | the bridge on the Synapse machine | the VPS server (`GET /health` answering fixed text) | sounds a local siren through `alarmant-pc` and writes a terminal notice; it cannot reach the phone without the server |
+| **B: PC-side check** | `alarmant-pc` on the Synapse machine ("the PC") | the VPS server (`GET /health` answering fixed text) | sounds a local siren through `alarmant-pc` and writes a terminal notice; it cannot reach the phone without the server |
 | **C: an external dead-man** | a third-party heartbeat service (PM ruling 2026-11-20: **in the design**) | pings from the VPS watchdog and from the bridge | notices when A **and** the VPS, or the PC and the VPS, are down together, and pages **CireSnave's own phone with no AlarmAnt dependency** (section 5.6). Creating the account is CireSnave's, not the lane's |
 
 ### 5.1 What the bridge reports and how often
 
-Every 60 seconds the bridge posts a **heartbeat** to the server (`POST /heartbeat`, a new route with its **own key**, which can post heartbeats and nothing else, never the API key): fixed fields `{"synapse":"up|down","canary":"ok|late","bridge":"up"}`. How it knows: `synapsed-client` proves the daemon before any credential is sent (read, rc.262), then the bridge runs a **canary**: every 5 minutes a message from `alarmant` to itself (needs a send grant to self) must come back within 30 seconds, proving mail is delivered end to end, not only that the port answers. The heartbeat carries no secret and no text.
+Every 60 seconds the bridge posts a **heartbeat** to the server (`POST /heartbeat`, a new route with its **own key**, which can post heartbeats and nothing else, never the API key): fixed fields `{"synapse":"up|down","canary":"ok|late","bridge":"up"}`. How it knows: `synapsed-client` proves the daemon before any credential is sent (read, rc.262), then the bridge runs a **canary**: every 5 minutes a message from `alarmant` to itself (needs a send grant to self) must come back within 30 seconds, and the heartbeat says `canary: late` only after two consecutive misses (5.2), proving mail is delivered end to end, not only that the port answers. The heartbeat carries no secret and no text.
 
 **What the PC is, precisely:** "the PC" is the machine that hosts `synapsed`, the bridge and the lanes. Its liveness is the bridge's heartbeat. **`alarmant-pc`'s polls of `/pc/alarm` are never used as a liveness signal**: that would make the server record a PC fetch, which constraint 13 forbids, and the server is never told when the PC could not sound (constraint 18). The watchdog is a separate process with a separate route.
 
+**Observer B's outgoing `GET /health` is inside the 490 C limits.** The no-presence-probe constraint concerns the TARGET device (the person's phone: no ping, no online check before an alarm, no UDP slot machinery). `/health` on our own phone server is a service-health check that sounds a local siren. It is plain HTTPS over TCP on a fixed schedule with no adaptation; its result never becomes a device-status record and feeds nothing into escalation, target removal or "device offline".
+
 ### 5.2 What triggers a page, and how a false-alarm storm is avoided
 
-* **Observer A pages** when **3 consecutive heartbeats are missing** (at 60 seconds, about 3 minutes), or when a heartbeat says `synapse: down` or `canary: late` **3 times in a row**. A single miss or late canary pages nothing.
+* **Observer A pages** when **3 consecutive heartbeats are missing** (at 60 seconds, about 3 minutes), or when a heartbeat says `synapse: down` **3 times in a row**, or says `canary: late`. The canary reports `late` only after **TWO** consecutive missed canaries (`FAILS_FOR_LATE = 2` in `src/canary.rs`; a fixed count, no learning, S7): one missed canary is noise, and two at 5 minutes is already about 10 minutes of undelivered mail before the 3-heartbeat rule applies. A single miss or single late canary pages nothing.
 * **Clearing needs 3 consecutive good heartbeats**, so a flapping link does not page, clear and page again.
 * **One open watchdog alert per component** (`pc`, `synapse`) at a time, and **no new page for a component for 30 minutes after a human acknowledges it** even if the fault persists (the human has been told; a second page would be the storm). Overall cap: **2 watchdog pages an hour**. A page over a cap is audited and not sent.
 * **Maintenance:** `alarmant watchdog pause --minutes N` (operator CLI on the VPS, maximum 60, audited, expires by itself) so a planned reboot is not an incident. *Patent note:* a time-bounded manual pause is not a schedule, but it sits near constraint 7; I am flagging it rather than deciding it (question 10.5).
@@ -118,7 +120,7 @@ Fixed text, same alert path, same single priority (no levels): title `AlarmAnt w
 ### 5.4 How the watchdog proves it is itself alive
 
 * The phone server already runs a **daily self-test** (A6) that exercises the chain; it stays and is the existing proof of the VPS path. A failed self-test goes to the failure notifier, which is not the phone.
-* Observer B proves the VPS is answering every minute; if it is not, the PC sounds and logs locally. Observer A is the VPS's own check of the PC, so each side watches the other.
+* Observer B (in `alarmant-pc`) proves the VPS is answering every minute; if it is not, the PC sounds and logs locally. Observer A is the VPS's own check of the PC, so each side watches the other.
 * **What A and B alone do not cover:** the VPS and the PC down together, or the VPS down while the PC is off. Only observer C covers that, and **until CireSnave has created its account and the pings are configured, a double failure is silent.** C is in the design; its activation is his (section 5.6).
 * The watchdog's own failures are audited (heartbeat route errors, key rejected, store unreadable), and a watchdog that cannot start refuses to start, loudly, rather than run blind.
 
@@ -203,7 +205,7 @@ All are my starting values with no measurement behind them; CireSnave reads them
 | Bridge per sender role: open / per day | 1 / 3 | 3.4 |
 | Ack poll interval, and how long an alert is followed | 20 seconds, 24 hours | 3.6 |
 | Heartbeat interval (bridge to server, and each external ping) | 60 seconds | 5.1, 5.6 |
-| Canary (bridge mails itself), and its allowed delay | every 5 minutes, 30 seconds | 5.1 |
+| Canary (bridge mails itself), its allowed delay, and misses before `late` | every 5 minutes, 30 seconds, 2 | 5.1, 5.2 |
 | Missed or bad heartbeats before a page, and good ones before clearing | 3 and 3 | 5.2 |
 | Quiet after a human acknowledges a watchdog page | 30 minutes | 5.2 |
 | Watchdog pages overall | 2 an hour | 5.2 |
