@@ -137,6 +137,24 @@ impl PcClient {
         }
     }
 
+    /// Observer B's check: `GET /health` answers 200 with the fixed text. Sends no key and no status;
+    /// the answer never leaves this process.
+    pub async fn healthy(&self) -> bool {
+        let Ok(res) = self
+            .client
+            .get(format!("{}/health", self.base))
+            .send()
+            .await
+        else {
+            return false;
+        };
+        res.status().as_u16() == 200
+            && res
+                .text()
+                .await
+                .is_ok_and(|t| t.trim() == crate::hostwatch::HEALTH_TEXT)
+    }
+
     /// The operator's Acknowledge for one alert.
     pub async fn acknowledge(&self, alert_id: &str) -> Result<(), PcError> {
         let res = self

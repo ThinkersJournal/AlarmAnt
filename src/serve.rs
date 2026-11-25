@@ -25,6 +25,7 @@ use crate::routes::{
     register_route,
 };
 use crate::second::SecondError;
+use crate::watchstate::{WatchState, watchdog_step};
 use crate::wire::{acknowledge_escalating, raise_escalating};
 
 /// Everything the service shares between its routes and its timer.
@@ -41,6 +42,8 @@ pub struct App<T, D> {
     pub limiter: Arc<FailureLimiter>,
     /// The cap on `POST /alert` (ROADMAP A10).
     pub alert_limiter: Arc<AlertLimiter>,
+    /// The watchdog (observer A), when its key is configured.
+    pub watch: Option<Arc<WatchState>>,
     pub clock: Clock,
 }
 
@@ -70,6 +73,7 @@ impl<T, D> App<T, D> {
             board,
             limiter: Arc::new(FailureLimiter::default()),
             alert_limiter: Arc::new(AlertLimiter::default()),
+            watch: None,
             clock,
         }
     }
@@ -80,6 +84,15 @@ impl<T, D> App<T, D> {
     pub fn with_alert_limits(self, limits: crate::ratelimit::RateLimits) -> Self {
         App {
             alert_limiter: Arc::new(AlertLimiter::new(limits)),
+            ..self
+        }
+    }
+
+    /// Turns the watchdog on: `POST /heartbeat` with `key`, and its page step in [`tick_once`].
+    pub fn with_watchdog(self, key: AckToken) -> Self {
+        let now = (self.clock)();
+        App {
+            watch: Some(Arc::new(WatchState::new(key, now))),
             ..self
         }
     }
@@ -113,6 +126,7 @@ where
     let server = alert_route(Server::new(), app);
     let server = ack_route(server, app);
     let server = alert_state_route(server, app);
+    let server = health_route(server);
     let devices: Arc<dyn DeviceStore> = app.devices.clone();
     let server = register_route(
         server,
@@ -126,6 +140,12 @@ where
     );
     let server = device_token_route(server, devices);
     let server = pc_ack_route(server, app);
+    let server = match &app.watch {
+        Some(w) => {
+            crate::heartbeat::heartbeat_route(server, w.heartbeat_config(Arc::clone(&app.clock)))
+        }
+        None => server,
+    };
     pc_alarm_route(
         server,
         PcAlarmConfig {
@@ -234,6 +254,21 @@ where
             let (status, body) = response(&result);
             json_response(status, &body)
         }
+    })
+}
+
+/// Adds `GET /health` (observer B): no key, fixed text `ok`, and it records and reads nothing, so it
+/// cannot be a liveness signal about the PC or the phone (constraint 13).
+fn health_route(server: Server) -> Server {
+    server.get("/health", |_req: Request| async {
+        let mut res = Response::new(httpant_server::core::Body::from_bytes(
+            crate::hostwatch::HEALTH_TEXT,
+        ));
+        res.headers_mut().insert(
+            httpant_server::core::http::header::CONTENT_TYPE,
+            httpant_server::core::http::header::HeaderValue::from_static("text/plain"),
+        );
+        res
     })
 }
 
@@ -366,6 +401,17 @@ where
         let mut e = app.escalator.lock().unwrap_or_else(|p| p.into_inner());
         e.tick(now, &*app.dispatcher);
     }
+    if let Some(w) = &app.watch {
+        watchdog_step(
+            w,
+            &*app.devices,
+            &*app.transport,
+            &*app.alerts,
+            &app.escalator,
+            now,
+        )
+        .await;
+    }
     drain_second(
         &app.dispatcher,
         &*app.devices,
@@ -437,6 +483,60 @@ mod tests {
             1,
             Arc::new(move || now.load(Ordering::SeqCst)),
         )
+    }
+
+    #[tokio::test]
+    async fn health_answers_the_fixed_text_without_a_key() {
+        let a = app(Arc::new(AtomicU64::new(5)));
+        let srv = public_server(&a).bind("127.0.0.1:0").await.unwrap();
+        let res = Client::new()
+            .get(format!("http://{}/health", srv.addr()))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status().as_u16(), 200);
+        assert_eq!(res.text().await.unwrap(), "ok");
+        srv.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_heartbeat_route_exists_only_when_the_watchdog_is_configured() {
+        let hb = "heartbeat-key-0123456789-0123456789";
+        let body = r#"{"synapse":"up","canary":"ok","bridge":"up"}"#;
+        for (watch, want) in [(true, 200), (false, 404)] {
+            let mut a = app(Arc::new(AtomicU64::new(5)));
+            if watch {
+                a = a.with_watchdog(AckToken::new(hb));
+            }
+            let srv = public_server(&a).bind("127.0.0.1:0").await.unwrap();
+            let got = Client::new()
+                .post(format!("http://{}/heartbeat", srv.addr()))
+                .header("authorization", format!("Bearer {hb}"))
+                .body(body)
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16();
+            assert!(
+                got == want || (!watch && got == 405),
+                "watch={watch} got {got}"
+            );
+            // the API key does not open it
+            if watch {
+                let got = Client::new()
+                    .post(format!("http://{}/heartbeat", srv.addr()))
+                    .header("authorization", format!("Bearer {KEY}"))
+                    .body(body)
+                    .send()
+                    .await
+                    .unwrap()
+                    .status()
+                    .as_u16();
+                assert_eq!(got, 401, "the API key is not the heartbeat key");
+            }
+            srv.shutdown().await.unwrap();
+        }
     }
 
     #[test]

@@ -12,10 +12,13 @@ pub mod adminapi;
 pub mod auth;
 pub mod bridge;
 pub mod bridgeclient;
+pub mod canary;
 pub mod channel;
 pub mod enroll;
 pub mod escalate;
 pub mod fcm;
+pub mod heartbeat;
+pub mod hostwatch;
 pub mod pcclient;
 pub mod persist;
 pub mod push;
@@ -28,6 +31,8 @@ pub mod second;
 pub mod selftest;
 pub mod serve;
 pub mod tls;
+pub mod watchdog;
+pub mod watchstate;
 pub mod wire;
 
 /// Where an alert stands. Flat chain: person 1, then person 2, no third tier.

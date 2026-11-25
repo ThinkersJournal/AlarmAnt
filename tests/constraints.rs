@@ -83,6 +83,9 @@ fn the_pc_program_sends_only_acknowledge() {
     let src = read("src/pcclient.rs");
     assert_eq!(count(&src, ".post("), 1, "one outgoing POST");
     assert!(src.contains("/pc/ack/"));
+    // `.get(` is the alarm list and the health check (observer B): both only ask, neither reports
+    assert_eq!(count(&src, ".get(format!(\"{}/pc/alarm\""), 1);
+    assert_eq!(count(&src, ".get(format!(\"{}/health\""), 1);
     for verb in [".put(", ".patch(", ".delete("] {
         assert_eq!(count(&src, verb), 0, "{verb}");
     }
@@ -119,7 +122,12 @@ fn the_escalator_takes_only_a_raise_an_ack_and_the_timer() {
 #[test]
 fn the_server_has_no_route_that_takes_a_phone_or_pc_status() {
     let mut routes = Vec::new();
-    for f in ["src/serve.rs", "src/routes.rs", "src/channel.rs"] {
+    for f in [
+        "src/serve.rs",
+        "src/routes.rs",
+        "src/channel.rs",
+        "src/heartbeat.rs",
+    ] {
         for l in read(f).lines() {
             let l = l.trim();
             for verb in ["post", "put", "get"] {
@@ -138,9 +146,13 @@ fn the_server_has_no_route_that_takes_a_phone_or_pc_status() {
     routes.dedup();
     let known = [
         "GET /alert/:alert_id",
+        // observer B: no key, fixed text, records nothing (board 490 C)
+        "GET /health",
         "GET /pc/alarm",
         "POST /ack/:alert_id",
         "POST /alert",
+        // the bridge's own-key heartbeat (board 490 C, 2026-11-24): fixed shape, not a phone or PC status
+        "POST /heartbeat",
         "POST /pc/ack/:alert_id",
         "POST /register",
         "PUT /device/token",
