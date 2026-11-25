@@ -68,6 +68,8 @@ pub enum Refusal {
     SenderLimit,
     OpenLimit,
     DayLimit,
+    /// The header did not read as `[TAG] subject to=... urgency=...`.
+    Malformed,
 }
 
 impl Refusal {
@@ -79,6 +81,7 @@ impl Refusal {
             Refusal::SenderLimit => "sender-limit",
             Refusal::OpenLimit => "open-limit",
             Refusal::DayLimit => "day-limit",
+            Refusal::Malformed => "malformed",
         }
     }
 }
@@ -103,6 +106,8 @@ pub struct OpenAlert {
     pub alert_id: String,
     pub sender: String,
     pub message_id: String,
+    /// The header's subject word, kept to say which page was acknowledged (`-` from an older file).
+    pub subject: String,
     pub raised_at: u64,
 }
 
@@ -189,6 +194,7 @@ impl Gate {
                 alert_id: alert_id.to_owned(),
                 sender,
                 message_id: m.message_id.clone(),
+                subject: strip_controls(&m.subject),
                 raised_at: now,
             },
         );
@@ -229,6 +235,7 @@ pub fn save_open(path: &Path, open: &[OpenAlert]) -> io::Result<()> {
                 "alert_id": o.alert_id,
                 "sender": o.sender,
                 "message_id": o.message_id,
+                "subject": o.subject,
                 "raised_at": o.raised_at,
             })
             .to_string(),
@@ -271,6 +278,7 @@ pub fn load_open(path: &Path) -> io::Result<Vec<OpenAlert>> {
             alert_id: s("alert_id").ok_or_else(|| bad(i + 1))?,
             sender: s("sender").ok_or_else(|| bad(i + 1))?,
             message_id: s("message_id").ok_or_else(|| bad(i + 1))?,
+            subject: s("subject").unwrap_or_else(|| "-".to_owned()),
             raised_at: v
                 .get("raised_at")
                 .and_then(|x| x.as_u64())
@@ -340,6 +348,175 @@ pub fn audit_line(
         o.insert("code".into(), r.code().into());
     }
     v.to_string()
+}
+
+// ---- the inbound message and the two replies (docs/SYNAPSE-ADAPTER.md 3.1, 3.2) ----
+
+/// The v1 message types (MESSAGE-FORMATS); a header with any other tag is refused.
+const V1_TAGS: [&str; 9] = [
+    "STATUS", "READY", "MERGED", "HOLD", "ASK", "TASK", "NOTICE", "FINDING", "FIX",
+];
+
+/// A key or a subject word: letters, digits, `.`, `_`, `-`.
+fn plain(s: &str, max: usize) -> bool {
+    !s.is_empty()
+        && s.chars().count() <= max
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+}
+
+/// Reads what the daemon delivered. The daemon gives the authenticated sender (`from`) and the id;
+/// it gives no urgency and no addressee, so those are read from the L1 header, which the sender wrote
+/// and is **untrusted**: `[TAG] subject key=value ...` with a v1 tag, one plain subject word, every
+/// other token `key=value` with a plain key and a value of no spaces, `to` and `urgency` each exactly
+/// once. Anything else is refused as [`Refusal::Malformed`], never repaired and never echoed. The
+/// subject is the header's subject word; the body is every line after the header.
+pub fn parse_envelope(from: &str, message_id: &str, text: &str) -> Result<Incoming, Refusal> {
+    let (header, rest) = text.split_once('\n').unwrap_or((text, ""));
+    let mut tokens = header.trim_end_matches('\r').split(' ');
+    let tag = tokens
+        .next()
+        .and_then(|t| t.strip_prefix('['))
+        .and_then(|t| t.strip_suffix(']'))
+        .filter(|t| V1_TAGS.contains(t))
+        .ok_or(Refusal::Malformed)?;
+    let _ = tag;
+    let subject = tokens
+        .next()
+        .filter(|s| plain(s, MAX_SUBJECT))
+        .ok_or(Refusal::Malformed)?;
+    let (mut to, mut urgency) = (None, None);
+    for t in tokens {
+        let (k, v) = t.split_once('=').ok_or(Refusal::Malformed)?;
+        if !plain(k, 40) || v.is_empty() || v.chars().count() > MAX_SUBJECT {
+            return Err(Refusal::Malformed);
+        }
+        let slot = match k {
+            "to" => &mut to,
+            "urgency" => &mut urgency,
+            _ => continue,
+        };
+        if slot.replace(v).is_some() {
+            return Err(Refusal::Malformed);
+        }
+    }
+    Ok(Incoming {
+        from: from.to_owned(),
+        to: to.ok_or(Refusal::Malformed)?.to_owned(),
+        urgency_high: urgency.ok_or(Refusal::Malformed)? == "high",
+        message_id: message_id.to_owned(),
+        subject: subject.to_owned(),
+        body: rest.to_owned(),
+    })
+}
+
+/// The Synapse role the bridge claims unless configured otherwise. Never the lane's role.
+pub const DEFAULT_BRIDGE_ROLE: &str = "alarmant-bridge";
+
+/// The role the bridge may NOT use: the one the alarmant lane's own session holds.
+const LANE_ROLE: &str = "alarmant";
+
+/// The role the bridge runs as: the configured value (`ALARMANT_BRIDGE_ROLE`), else
+/// [`DEFAULT_BRIDGE_ROLE`]. Refuses the lane role `alarmant` (also as `alarmant@account`): Synapse's
+/// role epoch is the role's claim counter, so any claim of `alarmant` from any home with the keys kills the
+/// lane's session (409 `superseded`) until `synapse claim --role alarmant` runs from the lane home. The
+/// live smoke of 2026-11-24 did exactly that.
+pub fn bridge_role(configured: Option<&str>) -> Result<String, String> {
+    let role = configured.map(str::trim).filter(|r| !r.is_empty());
+    let Some(role) = role else {
+        return Ok(DEFAULT_BRIDGE_ROLE.to_owned());
+    };
+    let name = role.split('@').next().unwrap_or(role);
+    if name.eq_ignore_ascii_case(LANE_ROLE) {
+        return Err(format!(
+            "the bridge role must not be `{LANE_ROLE}`: that is the lane's role, and claiming it bumps the              role's claim counter and kills the lane's session (409 superseded); use another role,              default `{DEFAULT_BRIDGE_ROLE}`"
+        ));
+    }
+    Ok(role.to_owned())
+}
+
+/// Whether a message is the bridge's own kind of reply: it is acknowledged and dropped, never answered, so
+/// the bridge cannot answer its own replies for ever.
+/// Found by the live smoke run of 2026-11-24, where a refusal sent to the bridge's own role was read as
+/// incoming mail and refused in turn.
+pub fn is_own_traffic(text: &str) -> bool {
+    text.starts_with("[NOTICE] page-acked ") || text.starts_with("[NOTICE] page-refused ")
+}
+
+/// `YYYY-MM-DDTHH:MM:SSZ` for Unix seconds (no clock of its own, so no chrono).
+pub fn utc(secs: u64) -> String {
+    let (days, rem) = ((secs / DAY) as i64, secs % DAY);
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60
+    )
+}
+
+/// An ordinary Synapse reply from `alarmant` to the original sender (3.2, the form the daemon's L1
+/// check accepted on 2026-11-20): where to send it, the id that makes a retry a duplicate, and the text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reply {
+    pub to: String,
+    pub message_id: String,
+    pub text: String,
+}
+
+/// An id the daemon will take: the pieces joined, anything outside letters, digits, `.`, `_`, `-`
+/// turned into `_`.
+fn reply_id(kind: &str, id: &str) -> String {
+    let safe: String = id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("alarmant-{kind}-{safe}")
+}
+
+/// The one thing that goes back for a page: the human acknowledged it. Names, an id and the original
+/// subject word; nothing about delivery, reading or reaching a phone (constraint 13).
+pub fn reply_acked(open: &OpenAlert, human: &str, when: u64) -> Reply {
+    Reply {
+        to: open.sender.clone(),
+        message_id: reply_id("acked", &open.message_id),
+        text: format!(
+            "[NOTICE] page-acked affects={} when={} action=none\nnote: id={} by={human}. Original subject: {}",
+            open.sender,
+            utc(when),
+            open.message_id,
+            open.subject
+        ),
+    }
+}
+
+/// A refusal, with its code and the id, never the text.
+pub fn reply_refused(m: &Incoming, why: Refusal, when: u64) -> Reply {
+    Reply {
+        to: m.from.clone(),
+        message_id: reply_id("refused", &m.message_id),
+        text: format!(
+            "[NOTICE] page-refused affects={} when={} action=none\nnote: id={} code={}",
+            strip_controls(&m.from),
+            utc(when),
+            strip_controls(&m.message_id),
+            why.code()
+        ),
+    }
 }
 
 #[cfg(test)]
@@ -537,5 +714,102 @@ mod tests {
             (v["code"].as_str(), v.get("text_sha256")),
             (Some("day-limit"), None)
         );
+    }
+
+    #[test]
+    fn the_header_is_read_strictly_and_never_trusted() {
+        let ok = parse_envelope(
+            "pm-ants@ciresnave",
+            "id1",
+            "[ASK] disk-full to=ciresnave urgency=high blocks=x\nthe box is out of space",
+        )
+        .unwrap();
+        assert_eq!(
+            (ok.to.as_str(), ok.urgency_high, ok.subject.as_str()),
+            ("ciresnave", true, "disk-full")
+        );
+        assert_eq!(ok.from, "pm-ants@ciresnave");
+        assert_eq!(ok.body, "the box is out of space");
+        let low = parse_envelope("a", "i", "[ASK] t to=ciresnave urgency=low").unwrap();
+        assert!(!low.urgency_high);
+        for bad in [
+            "",
+            "ASK t to=c urgency=high",
+            "[ACKED] t to=c urgency=high",
+            "[ASK] to=c urgency=high",
+            "[ASK] two words to=c urgency=high",
+            "[ASK] t to=c",
+            "[ASK] t urgency=high",
+            "[ASK] t to=c to=d urgency=high",
+            "[ASK] t to=c urgency=high stray",
+            "[ASK] t to= urgency=high",
+            "[ASK]  t to=c urgency=high",
+        ] {
+            assert_eq!(
+                parse_envelope("a", "i", bad),
+                Err(Refusal::Malformed),
+                "{bad:?}"
+            );
+        }
+        assert_eq!(Refusal::Malformed.code(), "malformed");
+    }
+
+    #[test]
+    fn the_bridges_own_replies_are_never_answered() {
+        assert!(is_own_traffic("[NOTICE] page-refused affects=x"));
+        assert!(is_own_traffic("[NOTICE] page-acked affects=x"));
+        assert!(!is_own_traffic("[NOTICE] topic to=c urgency=high"));
+        assert!(!is_own_traffic("[ASK] page-refused to=c urgency=high"));
+    }
+
+    #[test]
+    fn the_bridge_role_defaults_to_alarmant_bridge() {
+        assert_eq!(bridge_role(None), Ok(DEFAULT_BRIDGE_ROLE.to_owned()));
+        assert_eq!(DEFAULT_BRIDGE_ROLE, "alarmant-bridge");
+        assert_eq!(bridge_role(Some("  ")), Ok("alarmant-bridge".to_owned()));
+        assert_eq!(bridge_role(Some(" my-bridge ")), Ok("my-bridge".to_owned()));
+    }
+
+    #[test]
+    fn the_bridge_refuses_the_lane_role() {
+        for bad in ["alarmant", " alarmant ", "ALARMANT", "alarmant@ciresnave"] {
+            let e = bridge_role(Some(bad)).unwrap_err();
+            assert!(
+                e.contains("lane") && e.contains("claim counter"),
+                "{bad:?}: {e}"
+            );
+        }
+        // the lane role as a prefix of a different role is allowed
+        assert!(bridge_role(Some("alarmant-bridge2")).is_ok());
+    }
+
+    #[test]
+    fn utc_formats_known_instants() {
+        assert_eq!(utc(0), "1970-01-01T00:00:00Z");
+        assert_eq!(utc(951_782_400), "2000-02-29T00:00:00Z");
+        assert_eq!(utc(1_795_533_937), "2026-11-24T15:25:37Z");
+    }
+
+    #[test]
+    fn the_replies_are_the_accepted_notice_forms_and_carry_no_text() {
+        let open = OpenAlert {
+            alert_id: "a1".into(),
+            sender: "pm-ants@ciresnave".into(),
+            message_id: "pm-ants@ciresnave/x1".into(),
+            subject: "disk-full".into(),
+            raised_at: 0,
+        };
+        let r = reply_acked(&open, "ciresnave", 0);
+        assert_eq!(r.to, "pm-ants@ciresnave");
+        assert_eq!(r.message_id, "alarmant-acked-pm-ants_ciresnave_x1");
+        assert_eq!(
+            r.text,
+            "[NOTICE] page-acked affects=pm-ants@ciresnave when=1970-01-01T00:00:00Z action=none\nnote: id=pm-ants@ciresnave/x1 by=ciresnave. Original subject: disk-full"
+        );
+        let mut m = msg("pm-ants@ciresnave", "m9");
+        m.body = "SECRET-BODY".into();
+        let r = reply_refused(&m, Refusal::DayLimit, 0);
+        assert!(r.text.contains("code=day-limit") && !r.text.contains("SECRET"));
+        assert!(r.text.starts_with("[NOTICE] page-refused "));
     }
 }
