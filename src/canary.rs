@@ -256,7 +256,9 @@ mod tests {
 
     #[tokio::test]
     async fn the_client_and_the_route_agree_end_to_end() {
-        let key = "hb-key-0123456789-0123456789-0123456789";
+        // A fixed, obviously fake test value, built at run time so no secret-looking literal is committed.
+        let key = format!("EXAMPLE-NOT-A-SECRET-{}", "0".repeat(24));
+        let key = key.as_str();
         let wd = Arc::new(Mutex::new(Watchdog::new(1_000)));
         let srv = heartbeat_route(
             Server::new(),
