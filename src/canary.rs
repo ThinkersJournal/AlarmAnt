@@ -81,6 +81,31 @@ impl Canary {
     }
 }
 
+/// The canary mail the bridge sends to its own role: a valid L1 `[NOTICE]`, carrying only a token and the
+/// time. The bridge acknowledges and drops it when it comes back; it never reaches the gate or the phone.
+pub fn canary_text(token: &str, when: &str) -> String {
+    format!(
+        "[NOTICE] page-canary affects=alarmant-bridge when={when} action=none
+note: id={token}"
+    )
+}
+
+/// The token of a canary that came back: the mail must be from our own role (`role` or `role@account`) and
+/// have the canary subject and a plain `note: id=` line (letters, digits, `-`, at most 64). Anything else is
+/// ordinary mail.
+pub fn canary_return<'a>(from: &str, role: &str, text: &'a str) -> Option<&'a str> {
+    if from.split('@').next() != Some(role) || !text.starts_with("[NOTICE] page-canary ") {
+        return None;
+    }
+    let token = text.lines().find_map(|l| l.strip_prefix("note: id="))?;
+    let plain = !token.is_empty()
+        && token.len() <= 64
+        && token
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-');
+    plain.then_some(token)
+}
+
 /// The fixed-shape heartbeat body.
 pub fn heartbeat_body(synapse_up: bool, canary_ok: bool) -> String {
     format!(
@@ -181,6 +206,52 @@ mod tests {
     use crate::watchdog::{Component, Watchdog, parse_heartbeat};
     use httpant_server::Server;
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn a_canary_text_round_trips_and_is_a_valid_l1_notice() {
+        let text = canary_text("c1795533937", "2026-11-25T06:00:00Z");
+        assert!(text.starts_with("[NOTICE] page-canary affects="), "{text}");
+        assert!(text.contains(" when=2026-11-25T06:00:00Z action=none"));
+        assert_eq!(
+            canary_return("alarmant-bridge@ciresnave", "alarmant-bridge", &text),
+            Some("c1795533937")
+        );
+        // the bare role also counts as ourselves
+        assert_eq!(
+            canary_return("alarmant-bridge", "alarmant-bridge", &text),
+            Some("c1795533937")
+        );
+    }
+
+    #[test]
+    fn only_our_own_canary_counts_as_one() {
+        let text = canary_text("c1", "2026-11-25T06:00:00Z");
+        assert_eq!(
+            canary_return("someone@ciresnave", "alarmant-bridge", &text),
+            None
+        );
+        assert_eq!(
+            canary_return("alarmant-bridge2@ciresnave", "alarmant-bridge", &text),
+            None
+        );
+        let other = "[NOTICE] topic to=ciresnave urgency=high
+note: id=c1";
+        assert_eq!(
+            canary_return("alarmant-bridge@ciresnave", "alarmant-bridge", other),
+            None
+        );
+        let no_id = "[NOTICE] page-canary affects=x when=y action=none";
+        assert_eq!(
+            canary_return("alarmant-bridge@ciresnave", "alarmant-bridge", no_id),
+            None
+        );
+        let bad = "[NOTICE] page-canary affects=x when=y action=none
+note: id=a b";
+        assert_eq!(
+            canary_return("alarmant-bridge@ciresnave", "alarmant-bridge", bad),
+            None
+        );
+    }
 
     #[test]
     fn the_body_is_the_fixed_shape_the_server_accepts() {

@@ -22,14 +22,17 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use alarmant::bridge::{
     AuditEvent, BridgeLimits, Gate, Incoming, Refusal, Reply, audit_line, bridge_role,
-    is_own_traffic, load_open, parse_envelope, reply_acked, reply_refused, save_open,
+    is_own_traffic, load_open, parse_envelope, reply_acked, reply_refused, save_open, utc,
 };
 use alarmant::bridgeclient::{AlertState, BridgeClient};
+use alarmant::canary::{Canary, HeartbeatClient, canary_return, canary_text};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as B64;
 use serde_json::{Value, json};
 use synapsed_client::{Daemon, MailError};
 
+/// The heartbeat cadence (docs/SYNAPSE-ADAPTER.md 5.1).
+const HEARTBEAT_EVERY_SECS: u64 = 60;
 const TICK: Duration = Duration::from_secs(20);
 /// An alert is followed for at most a day (3.6).
 const FOLLOW_SECS: u64 = 86_400;
@@ -90,6 +93,21 @@ fn run() -> Result<(), String> {
         _ => BridgeClient::new(&base, key.trim()),
     }
     .map_err(|e| e.to_string())?;
+    // The watchdog heartbeat (docs/SYNAPSE-ADAPTER.md 5.1) is on only when its own key is set.
+    let heartbeat = match std::env::var("ALARMANT_HEARTBEAT_KEY") {
+        Ok(k) if !k.trim().is_empty() => Some(
+            match std::env::var("ALARMANT_BRIDGE_SERVER_CERT_FILE") {
+                Ok(p) if !p.trim().is_empty() => {
+                    let pem = std::fs::read(p.trim())
+                        .map_err(|_| "ALARMANT_BRIDGE_SERVER_CERT_FILE cannot be read")?;
+                    HeartbeatClient::trusting(&base, &k, &pem)
+                }
+                _ => HeartbeatClient::new(&base, &k),
+            }
+            .map_err(|e| e.to_string())?,
+        ),
+        _ => None,
+    };
     std::fs::create_dir_all(&state_dir).map_err(|e| e.to_string())?;
     let open_file = state_dir.join("open-alerts.jsonl");
     let audit_file = state_dir.join("audit.jsonl");
@@ -108,7 +126,12 @@ fn run() -> Result<(), String> {
         &audit_file,
         &audit_line(AuditEvent::Started, now(), None, None, None),
     );
-    eprintln!("alarmant-bridge: serving as role {role}");
+    eprintln!(
+        "alarmant-bridge: serving as role {role}; watchdog heartbeat {}",
+        if heartbeat.is_some() { "on" } else { "off" }
+    );
+    let mut canary = Canary::new(now());
+    let mut next_heartbeat = 0_u64;
 
     loop {
         let fetched = daemon.call(
@@ -116,6 +139,7 @@ fn run() -> Result<(), String> {
             "/v1/fetch",
             Some(&json!({"max": 10, "lease_secs": 120})),
         );
+        let mut synapse_up = true;
         let messages = match fetched {
             Ok(v) => v["messages"].as_array().cloned().unwrap_or_default(),
             Err(e) if lost(&e) => {
@@ -127,10 +151,18 @@ fn run() -> Result<(), String> {
             }
             Err(e) => {
                 eprintln!("alarmant-bridge: {e}");
+                synapse_up = false;
                 Vec::new()
             }
         };
         for msg in &messages {
+            if let Some(token) = returned_canary(&role, msg) {
+                canary.returned(&token, now());
+                if let Err(e) = ack_id(&mail, msg) {
+                    eprintln!("alarmant-bridge: {e}");
+                }
+                continue;
+            }
             if let Err(e) = handle(&mail, &rt, &client, &mut gate, msg, &open_file, &audit_file) {
                 if lost(&e) {
                     audit(
@@ -160,7 +192,57 @@ fn run() -> Result<(), String> {
             }
             eprintln!("alarmant-bridge: {e}");
         }
+        if let Some(hb) = &heartbeat {
+            watch(&mail, &rt, hb, &mut canary, &mut next_heartbeat, synapse_up);
+        }
         std::thread::sleep(TICK);
+    }
+}
+
+/// The token when `msg` is our own canary come back (from our own role, canary subject).
+fn returned_canary(role: &str, msg: &Value) -> Option<String> {
+    let from = msg["from"].as_str()?;
+    let text = String::from_utf8(B64.decode(msg["body_b64"].as_str()?).ok()?).ok()?;
+    canary_return(from, role, &text).map(str::to_owned)
+}
+
+/// Acknowledges one fetched message by its id.
+fn ack_id(mail: &Mailbox, msg: &Value) -> Result<(), MailError> {
+    let id = msg["message_id"].as_str().unwrap_or_default();
+    mail.daemon
+        .call(mail.role, "/v1/ack", Some(&json!({"message_id": id})))
+        .map(|_| ())
+}
+
+/// The watchdog's two fixed jobs (5.1): every 5 minutes send the canary (a mail to our own role that must
+/// come back within 30 seconds), and every 60 seconds post one heartbeat. A failed send or post is only
+/// logged: the server pages on the missing or late beat, never this process (S2, S7).
+fn watch(
+    mail: &Mailbox,
+    rt: &tokio::runtime::Runtime,
+    hb: &HeartbeatClient,
+    canary: &mut Canary,
+    next_heartbeat: &mut u64,
+    synapse_up: bool,
+) {
+    let t = now();
+    if canary.due(t) {
+        let token = format!("c{t}");
+        let reply = Reply {
+            to: mail.role.to_owned(),
+            message_id: format!("canary-{token}"),
+            text: canary_text(&token, &utc(t)),
+        };
+        // Counted as in flight even when the send fails: a canary that cannot be sent is a late canary.
+        canary.sent(&token, t);
+        let _ = send(mail, &reply);
+    }
+    if t >= *next_heartbeat {
+        *next_heartbeat = t + HEARTBEAT_EVERY_SECS;
+        let ok = canary.ok(t);
+        if let Err(e) = rt.block_on(hb.post(synapse_up, ok)) {
+            eprintln!("alarmant-bridge: heartbeat not posted: {e}");
+        }
     }
 }
 
