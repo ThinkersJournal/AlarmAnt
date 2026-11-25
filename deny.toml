@@ -5,6 +5,13 @@ all-features = true
 
 [advisories]
 version = 2
+# RUSTSEC-2026-0543 (chrono 0.4.45 unmaintained, no safe upgrade): a maintenance advisory, not a vulnerability. chrono arrives only
+# through synapsed-client rc.266 -> synapse-security/synapse -> auto-discovery 0.3.3; no AlarmAnt code or dependency uses it. EXPIRES 2026-12-17
+# (CireSnave's standing OK of 2026-11-18, EXPECTATIONS 6.15b; PM ruling A for this PR 2026-11-25): re-check then, do not extend without a new
+# decision. Exit: the ROADMAP row A14 (the root fix is upstream); remove this entry when chrono is out of Cargo.lock. Gate commit by pm-assist.
+ignore = [
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, no safe upgrade; maintenance advisory, not a vulnerability; arrives only via synapsed-client rc.266; expires 2026-12-17; exit = ROADMAP row A14" },
+]
 
 [licenses]
 version = 2

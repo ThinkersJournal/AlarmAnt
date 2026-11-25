@@ -11,6 +11,7 @@ pub mod admin;
 pub mod adminapi;
 pub mod auth;
 pub mod bridge;
+pub mod bridgeclient;
 pub mod channel;
 pub mod enroll;
 pub mod escalate;
