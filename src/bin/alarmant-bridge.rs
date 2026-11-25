@@ -108,7 +108,7 @@ fn run() -> Result<(), String> {
         &audit_file,
         &audit_line(AuditEvent::Started, now(), None, None, None),
     );
-    eprintln!("alarmant-bridge: serving {account} as role {role}");
+    eprintln!("alarmant-bridge: serving as role {role}");
 
     loop {
         let fetched = daemon.call(
