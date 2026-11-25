@@ -410,6 +410,31 @@ pub fn parse_envelope(from: &str, message_id: &str, text: &str) -> Result<Incomi
     })
 }
 
+/// The Synapse role the bridge claims unless configured otherwise. Never the lane's role.
+pub const DEFAULT_BRIDGE_ROLE: &str = "alarmant-bridge";
+
+/// The role the bridge may NOT use: the one the alarmant lane's own session holds.
+const LANE_ROLE: &str = "alarmant";
+
+/// The role the bridge runs as: the configured value (`ALARMANT_BRIDGE_ROLE`), else
+/// [`DEFAULT_BRIDGE_ROLE`]. Refuses the lane role `alarmant` (also as `alarmant@account`): Synapse's
+/// role epoch is the role's claim counter, so any claim of `alarmant` from any home with the keys kills the
+/// lane's session (409 `superseded`) until `synapse claim --role alarmant` runs from the lane home. The
+/// live smoke of 2026-11-24 did exactly that.
+pub fn bridge_role(configured: Option<&str>) -> Result<String, String> {
+    let role = configured.map(str::trim).filter(|r| !r.is_empty());
+    let Some(role) = role else {
+        return Ok(DEFAULT_BRIDGE_ROLE.to_owned());
+    };
+    let name = role.split('@').next().unwrap_or(role);
+    if name.eq_ignore_ascii_case(LANE_ROLE) {
+        return Err(format!(
+            "the bridge role must not be `{LANE_ROLE}`: that is the lane's role, and claiming it bumps the              role's claim counter and kills the lane's session (409 superseded); use another role,              default `{DEFAULT_BRIDGE_ROLE}`"
+        ));
+    }
+    Ok(role.to_owned())
+}
+
 /// Whether a message is the bridge's own kind of reply: it is acknowledged and dropped, never answered, so
 /// the bridge cannot answer its own replies for ever.
 /// Found by the live smoke run of 2026-11-24, where a refusal sent to the bridge's own role was read as
@@ -735,6 +760,27 @@ mod tests {
         assert!(is_own_traffic("[NOTICE] page-acked affects=x"));
         assert!(!is_own_traffic("[NOTICE] topic to=c urgency=high"));
         assert!(!is_own_traffic("[ASK] page-refused to=c urgency=high"));
+    }
+
+    #[test]
+    fn the_bridge_role_defaults_to_alarmant_bridge() {
+        assert_eq!(bridge_role(None), Ok(DEFAULT_BRIDGE_ROLE.to_owned()));
+        assert_eq!(DEFAULT_BRIDGE_ROLE, "alarmant-bridge");
+        assert_eq!(bridge_role(Some("  ")), Ok("alarmant-bridge".to_owned()));
+        assert_eq!(bridge_role(Some(" my-bridge ")), Ok("my-bridge".to_owned()));
+    }
+
+    #[test]
+    fn the_bridge_refuses_the_lane_role() {
+        for bad in ["alarmant", " alarmant ", "ALARMANT", "alarmant@ciresnave"] {
+            let e = bridge_role(Some(bad)).unwrap_err();
+            assert!(
+                e.contains("lane") && e.contains("claim counter"),
+                "{bad:?}: {e}"
+            );
+        }
+        // the lane role as a prefix of a different role is allowed
+        assert!(bridge_role(Some("alarmant-bridge2")).is_ok());
     }
 
     #[test]

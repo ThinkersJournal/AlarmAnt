@@ -1,5 +1,5 @@
 //! `alarmant-bridge`: the Synapse human-delivery adapter (`docs/SYNAPSE-ADAPTER.md` 3.1 to 3.6,
-//! CireSnave ruling 478). It runs beside `synapsed`, claims the role `alarmant`'s existing session (it
+//! CireSnave ruling 478). It runs beside `synapsed`, claims its own Synapse role (default `alarmant-bridge`, never the lane's `alarmant`) (it
 //! never re-claims: a superseded or unauthorized session stops it), reads mail, raises one alert on the
 //! phone server for each message that passes the gate, and when the human acknowledges, sends the
 //! original sender one `[NOTICE] page-acked` mail. It has no listening socket.
@@ -11,7 +11,7 @@
 //! and the daemon redelivers it.
 //!
 //! Environment: `SYNAPSE_HOME` (the daemon's home), `ALARMANT_BRIDGE_SERVER` and `ALARMANT_BRIDGE_KEY`,
-//! `ALARMANT_BRIDGE_STATE_DIR` (open-alert file and audit file); optionally `ALARMANT_BRIDGE_ACCOUNT`
+//! `ALARMANT_BRIDGE_STATE_DIR` (open-alert file and audit file); optionally `ALARMANT_BRIDGE_ROLE` (refused if `alarmant`), `ALARMANT_BRIDGE_ACCOUNT`
 //! (default `ciresnave`) and `ALARMANT_BRIDGE_SERVER_CERT_FILE`. The key is never an argument and never
 //! printed.
 
@@ -21,8 +21,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use alarmant::bridge::{
-    AuditEvent, BridgeLimits, Gate, Incoming, Refusal, Reply, audit_line, is_own_traffic,
-    load_open, parse_envelope, reply_acked, reply_refused, save_open,
+    AuditEvent, BridgeLimits, Gate, Incoming, Refusal, Reply, audit_line, bridge_role,
+    is_own_traffic, load_open, parse_envelope, reply_acked, reply_refused, save_open,
 };
 use alarmant::bridgeclient::{AlertState, BridgeClient};
 use base64::Engine;
@@ -30,7 +30,6 @@ use base64::engine::general_purpose::STANDARD as B64;
 use serde_json::{Value, json};
 use synapsed_client::{Daemon, MailError};
 
-const ROLE: &str = "alarmant";
 const TICK: Duration = Duration::from_secs(20);
 /// An alert is followed for at most a day (3.6).
 const FOLLOW_SECS: u64 = 86_400;
@@ -52,15 +51,21 @@ fn lost(e: &MailError) -> bool {
     matches!(e, MailError::Api { kind, .. } if kind == "superseded" || kind == "unauthorized")
 }
 
-fn send(daemon: &Daemon, r: &Reply) -> Result<(), MailError> {
+/// The daemon connection and the role this process claims.
+struct Mailbox<'a> {
+    daemon: &'a Daemon,
+    role: &'a str,
+}
+
+fn send(mail: &Mailbox, r: &Reply) -> Result<(), MailError> {
     let body = json!({
         "to": r.to,
         "message_id": r.message_id,
         "body_b64": B64.encode(r.text.as_bytes()),
         "mode": "L1:message-formats/1",
     });
-    daemon
-        .call(ROLE, "/v1/send", Some(&body))
+    mail.daemon
+        .call(mail.role, "/v1/send", Some(&body))
         .map(|_| ())
         .inspect_err(|e| eprintln!("alarmant-bridge: send {}: {e}", r.message_id))
 }
@@ -74,6 +79,7 @@ fn run() -> Result<(), String> {
     let base = env("ALARMANT_BRIDGE_SERVER")?;
     let key = env("ALARMANT_BRIDGE_KEY")?;
     let state_dir = PathBuf::from(env("ALARMANT_BRIDGE_STATE_DIR")?);
+    let role = bridge_role(std::env::var("ALARMANT_BRIDGE_ROLE").ok().as_deref())?;
     let account = std::env::var("ALARMANT_BRIDGE_ACCOUNT").unwrap_or_else(|_| "ciresnave".into());
     let client = match std::env::var("ALARMANT_BRIDGE_SERVER_CERT_FILE") {
         Ok(p) if !p.trim().is_empty() => {
@@ -92,17 +98,21 @@ fn run() -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
     let daemon = Daemon::connect_existing(&home).map_err(|e| e.to_string())?;
+    let mail = Mailbox {
+        daemon: &daemon,
+        role: &role,
+    };
     let open = load_open(&open_file).map_err(|e| format!("the open-alert file: {e}"))?;
     let mut gate = Gate::with_open(&account, BridgeLimits::default(), open);
     audit(
         &audit_file,
         &audit_line(AuditEvent::Started, now(), None, None, None),
     );
-    eprintln!("alarmant-bridge: serving {account}");
+    eprintln!("alarmant-bridge: serving {account} as role {role}");
 
     loop {
         let fetched = daemon.call(
-            ROLE,
+            &role,
             "/v1/fetch",
             Some(&json!({"max": 10, "lease_secs": 120})),
         );
@@ -121,15 +131,7 @@ fn run() -> Result<(), String> {
             }
         };
         for msg in &messages {
-            if let Err(e) = handle(
-                &daemon,
-                &rt,
-                &client,
-                &mut gate,
-                msg,
-                &open_file,
-                &audit_file,
-            ) {
+            if let Err(e) = handle(&mail, &rt, &client, &mut gate, msg, &open_file, &audit_file) {
                 if lost(&e) {
                     audit(
                         &audit_file,
@@ -141,7 +143,7 @@ fn run() -> Result<(), String> {
             }
         }
         if let Err(e) = poll(
-            &daemon,
+            &mail,
             &rt,
             &client,
             &mut gate,
@@ -166,7 +168,7 @@ fn run() -> Result<(), String> {
 /// a server that cannot be reached leaves the message unacked (the daemon redelivers it) and sends
 /// nothing (no delivery report, S2). A crash between raising and saving can raise a message twice.
 fn handle(
-    daemon: &Daemon,
+    mail: &Mailbox,
     rt: &tokio::runtime::Runtime,
     client: &BridgeClient,
     gate: &mut Gate,
@@ -182,8 +184,8 @@ fn handle(
         .and_then(|b| String::from_utf8(b).ok());
     let t = now();
     let ack = || {
-        daemon
-            .call(ROLE, "/v1/ack", Some(&json!({"message_id": id})))
+        mail.daemon
+            .call(mail.role, "/v1/ack", Some(&json!({"message_id": id})))
             .map(|_| ())
             .inspect_err(|e| eprintln!("alarmant-bridge: ack {id}: {e}"))
     };
@@ -192,7 +194,7 @@ fn handle(
             audit_file,
             &audit_line(AuditEvent::Refused, t, Some(m), None, Some(why)),
         );
-        send(daemon, &reply_refused(m, why, t))?;
+        send(mail, &reply_refused(m, why, t))?;
         ack()
     };
     let bare = || Incoming {
@@ -245,7 +247,7 @@ fn handle(
 /// Asks the server about each open alert; on Acknowledge, sends the one reply and forgets it. An alert
 /// followed for a day, or that the server no longer knows, is dropped in silence (no expiry notice, S2).
 fn poll(
-    daemon: &Daemon,
+    mail: &Mailbox,
     rt: &tokio::runtime::Runtime,
     client: &BridgeClient,
     gate: &mut Gate,
@@ -259,7 +261,7 @@ fn poll(
     for o in list {
         match rt.block_on(client.state(&o.alert_id)) {
             Ok(AlertState::Acked) => {
-                send(daemon, &reply_acked(&o, account, t))?;
+                send(mail, &reply_acked(&o, account, t))?;
                 gate.closed(&o.alert_id);
                 audit(
                     audit_file,
