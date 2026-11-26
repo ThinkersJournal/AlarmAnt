@@ -8,6 +8,13 @@ on:
   push:
     tags:
       - 'android-v*'
+  # Manual dry run: proves the build, signing and verify steps with a throwaway key made in the job.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run with a throwaway key (the only mode a manual run supports)'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -15,6 +22,7 @@ permissions:
 jobs:
   release:
     name: Signed release APK
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -52,4 +60,59 @@ jobs:
         with:
           name: alarmant-release-apk
           path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+  # Dry run (manual only): a throwaway keystore made on the runner, random passwords that exist only in this
+  # job (masked, never written to the repository, a log or the APK), a placeholder google-services.json
+  # (as in ci.yml), the same Gradle build, then a check that the APK certificate is the throwaway key.
+  # Creates no release and no tag, uses no repository secret, and keeps the APK one day.
+  dry-run:
+    name: Dry-run signed APK (throwaway key)
+    if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+      - name: Placeholder google-services.json
+        run: |
+          printf '%s' '{"project_info":{"project_number":"1","project_id":"placeholder","storage_bucket":"placeholder.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:1:android:0000000000000000","android_client_info":{"package_name":"com.thinkersjournal.alarmant"}},"api_key":[{"current_key":"placeholder"}]}],"configuration_version":"1"}' > app/google-services.json
+      - name: Make a throwaway keystore with a random password (one password, PKCS12)
+        run: |
+          set -eu
+          STORE_PW=$(openssl rand -hex 24)
+          echo "::add-mask::$STORE_PW"
+          {
+            echo "ALARMANT_KEYSTORE_FILE=$RUNNER_TEMP/dryrun.jks"
+            echo "ALARMANT_KEYSTORE_PASSWORD=$STORE_PW"
+            echo "ALARMANT_KEY_ALIAS=dryrun"
+            echo "ALARMANT_KEY_PASSWORD=$STORE_PW"
+          } >> "$GITHUB_ENV"
+          keytool -genkeypair -keystore "$RUNNER_TEMP/dryrun.jks" -storetype PKCS12             -storepass "$STORE_PW" -keypass "$STORE_PW" -alias dryrun             -keyalg RSA -keysize 3072 -validity 2 -dname "CN=AlarmAnt dry run, O=throwaway" >/dev/null
+      - name: Build the signed release APK
+        run: ./gradlew --no-daemon :app:assembleRelease
+      - name: Check the APK is signed with the throwaway key
+        run: |
+          set -eu
+          APK=$(ls app/build/outputs/apk/release/*.apk)
+          test "$(echo "$APK" | wc -l)" = 1 || { echo "expected one APK"; exit 1; }
+          case "$APK" in *unsigned*) echo "APK is unsigned"; exit 1;; esac
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -n 1)
+          "$APKSIGNER" verify "$APK"
+          WANT=$(keytool -list -v -keystore "$ALARMANT_KEYSTORE_FILE" -storepass "$ALARMANT_KEYSTORE_PASSWORD" -alias dryrun             | sed -n 's/^ *SHA256: *//p' | tr -d ':' | tr 'A-F' 'a-f')
+          GOT=$("$APKSIGNER" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: *//p')
+          echo "throwaway key SHA-256: $WANT"
+          echo "APK certificate SHA-256: $GOT"
+          test -n "$WANT" && test "$WANT" = "$GOT" || { echo "fingerprint mismatch"; exit 1; }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: alarmant-dryrun-apk-NOT-A-RELEASE
+          path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 1
           if-no-files-found: error
