@@ -105,10 +105,8 @@ jobs:
           case "$APK" in *unsigned*) echo "APK is unsigned"; exit 1;; esac
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -n 1)
           "$APKSIGNER" verify "$APK"
-          keytool -list -v -keystore "$ALARMANT_KEYSTORE_FILE" -storepass "$ALARMANT_KEYSTORE_PASSWORD" -alias dryrun | grep -i sha || true
-          "$APKSIGNER" verify --print-certs "$APK" | grep -i sha || true
-          WANT=$(keytool -list -v -keystore "$ALARMANT_KEYSTORE_FILE" -storepass "$ALARMANT_KEYSTORE_PASSWORD" -alias dryrun             | sed -n 's/^ *SHA256: *//p' | tr -d ':' | tr 'A-F' 'a-f')
-          GOT=$("$APKSIGNER" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: *//p')
+          WANT=$(keytool -list -v -keystore "$ALARMANT_KEYSTORE_FILE" -storepass "$ALARMANT_KEYSTORE_PASSWORD" -alias dryrun             | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | tr -d ':' | tr 'A-F' 'a-f')
+          GOT=$("$APKSIGNER" verify --print-certs "$APK" | sed -n 's/^.*[Ss]igner[^:]*: certificate SHA-256 digest: *//p' | head -n 1)
           echo "throwaway key SHA-256: $WANT"
           echo "APK certificate SHA-256: $GOT"
           test -n "$WANT" && test "$WANT" = "$GOT" || { echo "fingerprint mismatch"; exit 1; }
