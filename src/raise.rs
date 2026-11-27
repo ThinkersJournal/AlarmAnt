@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! A9: the one call other projects make to raise an alert.
 //!
 //! `POST /alert` with `Authorization: Bearer <api key>` and a JSON body `{"title": "...",

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! TLS for the public listener: a certificate and key the operator supplies (`ALARMANT_TLS_CERT_FILE`
 //! and `ALARMANT_TLS_KEY_FILE`, both or neither). Without them the server speaks plain HTTP and is meant
 //! to sit behind a TLS proxy; a phone only enrols against an `https://` address.

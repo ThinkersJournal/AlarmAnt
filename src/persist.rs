@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Registration slice (g): the stores on disk, through PersistAnt (DESIGN-REGISTRATION.md section 5).
 //!
 //! [`PersistedDevices`], [`PersistedAlerts`] and [`PersistedEnrollments`] are the in-memory stores

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! A6: the daily self-test alarm.
 //!
 //! Once a day the sender raises a real alert through the same path as any other (A9, FCM, the
@@ -249,7 +250,7 @@ pub async fn run_step(
         .tick(devices, transport, store, now, at_secs, deadline_secs)
         .await;
     state.save(&st.to_json());
-    notify_failures(&tick, previous_id.as_deref(), notifier);
+    let _sent = notify_failures(&tick, previous_id.as_deref(), notifier);
     let wake = if matches!(tick.raised, Some(Err(_))) {
         now + retry_secs.max(1)
     } else {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 package com.thinkersjournal.alarmant
 
 import androidx.test.ext.junit.runners.AndroidJUnit4

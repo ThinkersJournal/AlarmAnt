@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 package com.thinkersjournal.alarmant
 
 import android.content.Intent

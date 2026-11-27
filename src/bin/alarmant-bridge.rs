@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! `alarmant-bridge`: the Synapse human-delivery adapter (`docs/SYNAPSE-ADAPTER.md` 3.1 to 3.6,
 //! CireSnave ruling 478). It runs beside `synapsed`, claims its own Synapse role (default `alarmant-bridge`, never the lane's `alarmant`) (it
 //! never re-claims: a superseded or unauthorized session stops it), reads mail, raises one alert on the

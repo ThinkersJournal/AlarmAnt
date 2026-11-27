@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The watchdog's running parts (docs/SYNAPSE-ADAPTER.md 5): the shared state, the page step that
 //! raises a watchdog page through the NORMAL alert path (first app, second app, PC alarm), the
 //! acknowledgement read-back that starts the 30-minute quiet, and the operator's maintenance pause

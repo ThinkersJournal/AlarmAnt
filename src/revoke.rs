@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Registration slice (e): revocation (DESIGN-REGISTRATION.md section 4).
 //!
 //! `revoke` deletes the device record on the server and voids the ack token of every alert still

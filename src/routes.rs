@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The HTTP routes, on HTTPAnt's server half. Each route is a small function that adds itself to a
 //! [`Server`]; the handlers hold no logic of their own, they pass the header, the path and the clock
 //! to the framework-free handlers ([`crate::ack`], later [`crate::raise`]).

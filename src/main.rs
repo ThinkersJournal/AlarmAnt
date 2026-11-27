@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! `alarmant serve` runs the service; `alarmant enroll|revoke --contact first|second` talks to a
 //! running one over its loopback admin endpoint. Secrets come from the environment or a file,
 //! never the command line, and no message here repeats one.

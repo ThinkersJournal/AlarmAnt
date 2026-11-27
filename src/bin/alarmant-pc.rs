@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! `alarmant-pc`: the PC alarm (ruling 389, tier 3). A program in the operator's logged-in Windows
 //! session, not a service: it asks the server whether an alert has reached the PC step, and while
 //! one has, it unmutes the default speakers, sets their master volume to maximum (Core Audio) and

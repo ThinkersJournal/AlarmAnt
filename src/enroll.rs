@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Registration slice (b): the one-time enrolment code and its store (DESIGN-REGISTRATION.md).
 //!
 //! The operator makes a code (`new_enrollment`), reads it off the VPS once, and the phone presents

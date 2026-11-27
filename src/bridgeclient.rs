@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! What the bridge says to the phone server: `POST /alert` to raise, `GET /alert/:id` to ask whether it
 //! was acknowledged. The same API key as any sender, in the `Authorization` header only; the server
 //! answers `{"state":"open"}` or `{"state":"acked"}` and nothing else (constraint 13).

@@ -1,4 +1,4 @@
-# Patent sweep: AlarmAnt 0.0.0 @ 88ad9d4 (no code yet)
+# Patent sweep: AlarmAnt 0.4 (first run at 0.0.0 @ 88ad9d4, no code yet)
 
 Date: 2026-10-26 (first pass), 2026-10-27 (second pass); Run by: AlarmAnt lane, Sonnet 5.5; Method: AI-assisted web search, then independent claims read in full with `tools/patent-claims.py` (Google Patents pages); NOT legal advice; NOT a freedom-to-operate opinion. There is no attorney.
 

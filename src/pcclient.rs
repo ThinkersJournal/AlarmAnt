@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The PC alarm program's logic, free of the operating system: ask the server, start and stop a
 //! siren, acknowledge on the operator's say-so.
 //!

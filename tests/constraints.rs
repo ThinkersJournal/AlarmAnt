@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Structural guard for PATENT-SWEEP constraints 13-22 (CireSnave ruling 407-A, 2026-11-21): the phone
 //! sends nothing but Acknowledge (plus enrolment and token upkeep, which carry no status), the PC sends
 //! only Acknowledge, and the escalator takes no input but a raise, an Acknowledge and the timer.

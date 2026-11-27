@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Three-channel step 1b: the second contact's app push (ruling 389, tier 2).
 //!
 //! When the first timeout fires, [`push_second`] sends the same alert text to the second contact's

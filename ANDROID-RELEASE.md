@@ -11,6 +11,16 @@ branch push). It writes the keystore and the real `google-services.json` from re
 `:app:assembleRelease`, checks the APK is signed with `apksigner verify`, and keeps it as the workflow
 artifact `alarmant-release-apk`. It publishes nothing outward.
 
+## Dry run (no real key)
+
+`Actions > Android release > Run workflow` (input `dry_run`, default true) runs the separate `dry-run` job: it makes a
+throwaway PKCS12 keystore with `keytool` and a random password (masked; in the job's environment only), writes the same
+placeholder `google-services.json` that `ci.yml` uses, builds `:app:assembleRelease` through the same Gradle signing path,
+runs `apksigner verify`, and compares the APK's certificate SHA-256 with the throwaway key's. The APK is kept one day as
+`alarmant-dryrun-apk-NOT-A-RELEASE`. It creates no release and no tag and uses no repository secret. It proves the build and
+signing wiring only: not the real keystore, not the real Firebase file, not a phone install. The tag path (`release` job) runs
+only on a pushed `android-v*` tag and is not exercised by a dry run. A dry-run APK is never given to anyone.
+
 ## Repository secrets (CireSnave sets them; never in a file, argv or a log)
 
 | Secret | Content |

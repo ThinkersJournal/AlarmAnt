@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! A2 slice 2b: the real [`PushTransport`], over HTTPAnt.
 //!
 //! `send` signs in with the service account (cached by [`TokenCache`], refreshed a minute early),
