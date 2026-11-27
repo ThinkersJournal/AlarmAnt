@@ -1,3 +1,0 @@
-kind: Android release workflow: manual dry run with a throwaway key
----
-`android-release.yml` gains `workflow_dispatch` (input `dry_run`) and a `dry-run` job: throwaway keystore and random masked password made on the runner, placeholder `google-services.json`, signed `assembleRelease`, `apksigner verify`, and a check that the APK certificate fingerprint equals the throwaway key's; APK kept one day as a workflow artifact only, no release, no tag, no repository secret. The existing `release` job is unchanged except for `if: github.event_name == 'push'` so a manual run cannot reach it. CI/docs only. Verified: see the run report (board 462 C).

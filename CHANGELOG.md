@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.5 — Android release workflow: manual dry run with a throwaway key
+
+`android-release.yml` gains `workflow_dispatch` (input `dry_run`) and a `dry-run` job: throwaway keystore and random masked password made on the runner, placeholder `google-services.json`, signed `assembleRelease`, `apksigner verify`, and a check that the APK certificate fingerprint equals the throwaway key's; APK kept one day as a workflow artifact only, no release, no tag, no repository secret. The existing `release` job is unchanged except for `if: github.event_name == 'push'` so a manual run cannot reach it. CI/docs only. Verified: see the run report (board 462 C).
+
 ## 0.4.4 — CI: portfolio workflow pinned to CodeRipper 0.48.1
 
 The advisory `portfolio` job now calls ciresnave/coderipper portfolio.yml at 467fd259d6d062cba4c5683d310f1a6f2b66e763 (CodeRipper 0.48.1, was 0.47.5). No rule is silenced; a new Medium is dispositioned, not reverted. CI only, no code change.
