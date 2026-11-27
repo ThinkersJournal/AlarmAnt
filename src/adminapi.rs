@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The loopback admin endpoint and its client (PM ruling 2026-11-13, ROADMAP.md): `alarmant enroll`
 //! and `alarmant revoke` run as a thin client of the service, which is the only writer of its state.
 //!

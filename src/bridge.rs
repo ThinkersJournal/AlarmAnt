@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The pure logic of the Synapse human-delivery adapter (`docs/SYNAPSE-ADAPTER.md` sections 3 and 4;
 //! CireSnave ruling 478, 2026-11-21). No Synapse client, no network, no clock of its own: the bridge
 //! process feeds it what the daemon delivered and the time, and does what it says.

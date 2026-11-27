@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Registration slice (f): the operator commands `alarmant enroll --contact first|second` and
 //! `alarmant revoke --contact first|second` (DESIGN-REGISTRATION.md).
 //!

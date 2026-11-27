@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! A4: the acknowledge call back and per-alert state on the sender.
 //!
 //! The phone calls `POST /ack/{alert_id}` with `Authorization: Bearer <ack token>` (`AckWorker`).

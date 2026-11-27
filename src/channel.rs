@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The server's [`AlertChannel`] (ruling 389, tiers 2 and 3) and the PC-alarm board.
 //!
 //! [`AlertChannel`] is synchronous and runs under the escalator's lock, so [`Dispatcher`] only

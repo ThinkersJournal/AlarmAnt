@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! A2: the sender's sign-in to Google (service account, OAuth2 JWT bearer grant).
 //!
 //! Pure data and signing: no network, clock or file access. The caller reads the key through

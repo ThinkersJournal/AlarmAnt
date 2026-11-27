@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! A5 timer driver: runs the escalation state machine on a fixed timer.
 //!
 //! The caller owns the clock (seconds) and calls [`Escalator::tick`]; nothing

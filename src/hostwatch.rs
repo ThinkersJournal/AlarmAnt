@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Observer B of the watchdog (docs/SYNAPSE-ADAPTER.md 5): the PC checks the phone server. If
 //! `GET /health` fails 3 checks in a row (one a minute, a fixed cadence), the PC sounds its own siren
 //! and writes a terminal notice; 3 good checks in a row end it. The PC cannot reach the phone

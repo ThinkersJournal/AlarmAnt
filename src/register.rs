@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Registration slice (c): `POST /register` (DESIGN-REGISTRATION.md).
 //!
 //! The phone presents the one-time enrolment code ([`crate::enroll`]) as `Authorization: Bearer

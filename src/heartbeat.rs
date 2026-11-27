@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! `POST /heartbeat` (docs/SYNAPSE-ADAPTER.md 5.1): the bridge reports every 60 seconds with its own
 //! key, which can post heartbeats and nothing else. The body is the fixed shape of
 //! [`crate::watchdog::parse_heartbeat`]; the answer is an empty status. Each accepted beat feeds the

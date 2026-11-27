@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Observer A of the watchdog (docs/SYNAPSE-ADAPTER.md section 5): the server-side dead-man. It reads
 //! the bridge's heartbeats and says when a human should be paged. Pure logic on a clock the caller
 //! passes in; no I/O, no learning, no score: every number is a fixed deadline (PM ruling, board 490 C;

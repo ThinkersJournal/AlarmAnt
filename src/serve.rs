@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The running service: the public routes with the escalation timer wired in, and one timer step.
 //!
 //! [`public_server`] is `POST /alert` and `POST /ack/:id` through [`crate::wire`] (so a raised alert

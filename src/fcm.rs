@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! A2: the FCM HTTP v1 alert message and the seams the sender is built on.
 //!
 //! Pure data and traits; no network, clock or file access here. The HTTP call (HTTPAnt), the

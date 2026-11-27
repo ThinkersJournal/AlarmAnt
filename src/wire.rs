@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! A5 wiring: escalation hooked into raising (A9) and acknowledging (A4).
 //!
 //! [`raise_escalating`] is [`crate::raise::raise_alert`] plus starting the escalation timer;

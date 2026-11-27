@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! ROADMAP A10: a rate limit on `POST /alert`, keyed by the key's owner.
 //!
 //! The limit is on **raised alerts**, per owner, over a rolling hour and a rolling day. A request with a wrong

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! AlarmAnt: an emergency alert that cannot be ignored.
 //!
 //! This release holds the A5 escalation state machine only (see `DESIGN-A5.md`).

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The bridge's side of the watchdog (docs/SYNAPSE-ADAPTER.md 5.1): the 5-minute canary and the
 //! 60-second heartbeat it feeds. Pure logic plus one small client; the bridge binary owns the loop
 //! and the Synapse calls (a message from `alarmant` to itself must come back within 30 seconds).
